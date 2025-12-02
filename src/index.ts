@@ -115,6 +115,11 @@ type TeamMemberDetailRow = TeamMembershipRow & {
   last_name: string | null
 }
 
+type AuthContext = {
+  userId: string
+  roles: string[]
+}
+
 const API_PREFIX = '/api'
 
 const app = new Hono<Env>()
@@ -125,6 +130,20 @@ const normalizeEmail = (value: string) => value.trim().toLowerCase()
 const generateId = () => crypto.randomUUID()
 const randomToken = () => crypto.randomUUID().split('-')[0]
 const getDb = (env: Env): D1Database => env.HELLO_USER_DB ?? env.DB ?? (() => { throw new Error('Missing D1 binding') })()
+const parseAuth = (request: Request): AuthContext | null => {
+  const userId = request.headers.get('x-user-id')?.trim()
+  const roles = request.headers
+    .get('x-user-roles')
+    ?.split(',')
+    .map((role) => role.trim())
+    .filter(Boolean)
+
+  if (!userId || !roles?.length) return null
+
+  return { userId, roles }
+}
+
+const isMainAdmin = (auth: AuthContext) => auth.roles.includes('main_admin')
 
 const toUser = (row: UserRow) => ({
   id: row.id,
@@ -253,6 +272,36 @@ const fetchOrgMembers = async (db: D1Database, orgId: string) => {
   return rows.results ?? []
 }
 
+const fetchOrgMembershipForUser = async (db: D1Database, orgId: string, userId: string) =>
+  await db
+    .prepare<OrgMembershipRow>('SELECT * FROM org_memberships WHERE organization_id = ? AND user_id = ?')
+    .bind(orgId, userId)
+    .first()
+
+const fetchTeamMembershipForUser = async (db: D1Database, teamId: string, userId: string) =>
+  await db
+    .prepare<TeamMembershipRow>('SELECT * FROM team_memberships WHERE team_id = ? AND user_id = ?')
+    .bind(teamId, userId)
+    .first()
+
+const fetchTeamById = async (db: D1Database, teamId: string) =>
+  await db
+    .prepare<TeamRow>('SELECT * FROM teams WHERE id = ?')
+    .bind(teamId)
+    .first()
+
+const resolveTeamAdminScope = async (db: D1Database, teamId: string, auth: AuthContext) => {
+  const team = await fetchTeamById(db, teamId)
+  if (!team) return { team: null, orgAdmin: false, teamAdmin: false }
+
+  const orgMembership = await fetchOrgMembershipForUser(db, team.organization_id, auth.userId)
+  const orgAdmin = orgMembership?.role === 'org_admin'
+  const teamMembership = await fetchTeamMembershipForUser(db, teamId, auth.userId)
+  const teamAdmin = teamMembership?.role === 'team_admin'
+
+  return { team, orgAdmin, teamAdmin }
+}
+
 const fetchTeamMembers = async (db: D1Database, teamId: string) => {
   const rows = await db
     .prepare<RowResult<TeamMemberDetailRow>>(
@@ -270,6 +319,16 @@ const fetchTeamMembers = async (db: D1Database, teamId: string) => {
 }
 
 // Routes --------------------------------------------------------
+
+app.use(['/api/admin/*', '/api/organizations', '/api/organizations/*', '/api/teams/*'], async (c, next) => {
+  const auth = parseAuth(c.req.raw)
+  if (!auth) {
+    return c.json({ message: 'Authentication required' }, 401)
+  }
+
+  c.set('auth', auth)
+  await next()
+})
 
 app.get('/api/health', (c) =>
   c.json({ status: 'ok', timestamp: new Date().toISOString() })
@@ -396,6 +455,10 @@ app.post(
     const payload = c.req.valid('json')
     const normalized = normalizeEmail(payload.email)
     const db = getDb(c.env)
+    const auth = c.get('auth') as AuthContext
+    if (!isMainAdmin(auth)) {
+      return c.json({ message: 'Only main_admin users may create users' }, 403)
+    }
     const existing = await fetchUserByEmail(db, normalized)
     if (existing) {
       return c.json({ message: 'User already exists', user: toUser(existing) }, 200)
@@ -410,6 +473,10 @@ app.post(
 
 app.get('/api/admin/users', async (c) => {
   const db = getDb(c.env)
+  const auth = c.get('auth') as AuthContext
+  if (!isMainAdmin(auth)) {
+    return c.json({ message: 'Only main_admin users may list all users' }, 403)
+  }
   const rows = await db.prepare<RowResult<UserRow>>('SELECT * FROM users ORDER BY created_at DESC').all()
   return c.json({ users: (rows.results ?? []).map(toUser) })
 })
@@ -448,6 +515,10 @@ app.post(
   async (c) => {
     const payload = c.req.valid('json')
     const db = getDb(c.env)
+    const auth = c.get('auth') as AuthContext
+    if (!isMainAdmin(auth)) {
+      return c.json({ message: 'Only main_admin users may create organizations' }, 403)
+    }
     await db
       .prepare('INSERT INTO organizations (id, name, slug) VALUES (?, ?, ?)')
       .bind(generateId(), payload.name, payload.slug)
@@ -467,6 +538,10 @@ app.delete(
       params: { orgId },
     } = c.req.valid('params')
     const db = getDb(c.env)
+    const auth = c.get('auth') as AuthContext
+    if (!isMainAdmin(auth)) {
+      return c.json({ message: 'Only main_admin users may delete organizations' }, 403)
+    }
     await db.prepare('DELETE FROM organizations WHERE id = ?').bind(orgId).run()
     return c.json({ message: 'Organization removed' })
   }
@@ -480,6 +555,11 @@ app.get(
       params: { orgId },
     } = c.req.valid('params')
     const db = getDb(c.env)
+    const auth = c.get('auth') as AuthContext
+    const membership = await fetchOrgMembershipForUser(db, orgId, auth.userId)
+    if (!isMainAdmin(auth) && (!membership || membership.role !== 'org_admin')) {
+      return c.json({ message: 'Org admin role required for this organization' }, 403)
+    }
     const members = await fetchOrgMembers(db, orgId)
     return c.json({ members })
   }
@@ -495,6 +575,11 @@ app.post(
     } = c.req.valid('params')
     const payload = c.req.valid('json')
     const db = getDb(c.env)
+    const auth = c.get('auth') as AuthContext
+    const membership = await fetchOrgMembershipForUser(db, orgId, auth.userId)
+    if (!isMainAdmin(auth) && (!membership || membership.role !== 'org_admin')) {
+      return c.json({ message: 'Org admin role required for this organization' }, 403)
+    }
     await db
       .prepare('INSERT INTO org_memberships (id, organization_id, user_id, role) VALUES (?, ?, ?, ?)')
       .bind(generateId(), orgId, payload.userId, payload.role)
@@ -509,9 +594,32 @@ app.delete(
   zValidator('params', z.object({ orgId: z.string(), memberId: z.string() })),
   async (c) => {
     const {
-      params: { memberId },
+      params: { orgId, memberId },
     } = c.req.valid('params')
     const db = getDb(c.env)
+    const auth = c.get('auth') as AuthContext
+    const record = await db
+      .prepare<OrgMembershipRow>('SELECT * FROM org_memberships WHERE id = ?')
+      .bind(memberId)
+      .first()
+
+    if (!record) {
+      return c.json({ message: 'Membership not found' }, 404)
+    }
+
+    if (record.organization_id !== orgId) {
+      return c.json({ message: 'Membership does not belong to this organization' }, 400)
+    }
+
+    const membership = await fetchOrgMembershipForUser(db, orgId, auth.userId)
+    if (!isMainAdmin(auth) && (!membership || membership.role !== 'org_admin')) {
+      return c.json({ message: 'Org admin role required for this organization' }, 403)
+    }
+
+    if (record.role === 'org_admin' && !isMainAdmin(auth)) {
+      return c.json({ message: 'Cannot remove another org admin' }, 403)
+    }
+
     await db.prepare('DELETE FROM org_memberships WHERE id = ?').bind(memberId).run()
     return c.json({ message: 'Membership removed' })
   }
@@ -524,6 +632,11 @@ app.get('/api/organizations/:orgId/teams', async (c) => {
     return c.json({ message: 'Missing organization id' }, 400)
   }
   const db = getDb(c.env)
+  const auth = c.get('auth') as AuthContext
+  const membership = await fetchOrgMembershipForUser(db, orgId, auth.userId)
+  if (!isMainAdmin(auth) && (!membership || membership.role !== 'org_admin')) {
+    return c.json({ message: 'Org admin role required for this organization' }, 403)
+  }
   const rows = await db
     .prepare<RowResult<TeamRow>>('SELECT * FROM teams WHERE organization_id = ? ORDER BY created_at DESC')
     .bind(orgId)
@@ -541,6 +654,11 @@ app.post(
     }
     const payload = c.req.valid('json')
     const db = getDb(c.env)
+    const auth = c.get('auth') as AuthContext
+    const membership = await fetchOrgMembershipForUser(db, orgId, auth.userId)
+    if (!isMainAdmin(auth) && (!membership || membership.role !== 'org_admin')) {
+      return c.json({ message: 'Org admin role required for this organization' }, 403)
+    }
     await db
       .prepare('INSERT INTO teams (id, organization_id, name, description) VALUES (?, ?, ?, ?)')
       .bind(generateId(), orgId, payload.name, payload.description ?? null)
@@ -561,6 +679,18 @@ app.delete(
       params: { teamId },
     } = c.req.valid('params')
     const db = getDb(c.env)
+    const auth = c.get('auth') as AuthContext
+    const team = await fetchTeamById(db, teamId)
+
+    if (!team) {
+      return c.json({ message: 'Team not found' }, 404)
+    }
+
+    const membership = await fetchOrgMembershipForUser(db, team.organization_id, auth.userId)
+    if (!isMainAdmin(auth) && (!membership || membership.role !== 'org_admin')) {
+      return c.json({ message: 'Org admin role required for this organization' }, 403)
+    }
+
     await db.prepare('DELETE FROM teams WHERE id = ?').bind(teamId).run()
     return c.json({ message: 'Team deleted' })
   }
@@ -572,6 +702,14 @@ app.get('/api/teams/:teamId/members', async (c) => {
     return c.json({ message: 'Missing team id' }, 400)
   }
   const db = getDb(c.env)
+  const auth = c.get('auth') as AuthContext
+  const { team, orgAdmin, teamAdmin } = await resolveTeamAdminScope(db, teamId, auth)
+  if (!team) {
+    return c.json({ message: 'Team not found' }, 404)
+  }
+  if (!isMainAdmin(auth) && !orgAdmin && !teamAdmin) {
+    return c.json({ message: 'Admin access required for this team' }, 403)
+  }
   const members = await fetchTeamMembers(db, teamId)
   return c.json({ members })
 })
@@ -586,6 +724,14 @@ app.post(
     }
     const payload = c.req.valid('json')
     const db = getDb(c.env)
+    const auth = c.get('auth') as AuthContext
+    const { team, orgAdmin, teamAdmin } = await resolveTeamAdminScope(db, teamId, auth)
+    if (!team) {
+      return c.json({ message: 'Team not found' }, 404)
+    }
+    if (!isMainAdmin(auth) && !orgAdmin && !teamAdmin) {
+      return c.json({ message: 'Admin access required for this team' }, 403)
+    }
     await db
       .prepare('INSERT INTO team_memberships (id, team_id, user_id, role) VALUES (?, ?, ?, ?)')
       .bind(generateId(), teamId, payload.userId, payload.role)
@@ -600,21 +746,47 @@ app.patch(
   zValidator('json', z.object({ role: roleEnum })),
   async (c) => {
     const memberId = c.req.param('memberId')
-    if (!memberId) {
+    const teamId = c.req.param('teamId')
+    if (!memberId || !teamId) {
       return c.json({ message: 'Missing member id' }, 400)
     }
     const payload = c.req.valid('json')
     const db = getDb(c.env)
-    await db
-      .prepare('UPDATE team_memberships SET role = ? WHERE id = ?')
-      .bind(payload.role, memberId)
-      .run()
+    const auth = c.get('auth') as AuthContext
+    const { team, orgAdmin, teamAdmin } = await resolveTeamAdminScope(db, teamId, auth)
+    if (!team) {
+      return c.json({ message: 'Team not found' }, 404)
+    }
     const record = await db
       .prepare<TeamMembershipRow>('SELECT * FROM team_memberships WHERE id = ?')
       .bind(memberId)
       .first()
     if (!record) return c.json({ message: 'Member not found' }, 404)
-    return c.json({ member: record })
+
+    if (record.team_id !== teamId) {
+      return c.json({ message: 'Membership does not belong to this team' }, 400)
+    }
+
+    if (!isMainAdmin(auth) && !orgAdmin && !teamAdmin) {
+      return c.json({ message: 'Admin access required for this team' }, 403)
+    }
+
+    if (record.role === 'team_admin' && !isMainAdmin(auth) && !orgAdmin) {
+      return c.json({ message: 'Cannot change role for another team admin' }, 403)
+    }
+
+    await db
+      .prepare('UPDATE team_memberships SET role = ? WHERE id = ?')
+      .bind(payload.role, memberId)
+      .run()
+
+    const updated = await db
+      .prepare<TeamMembershipRow>('SELECT * FROM team_memberships WHERE id = ?')
+      .bind(memberId)
+      .first()
+
+    if (!updated) return c.json({ message: 'Member not found' }, 404)
+    return c.json({ member: updated })
   }
 )
 
@@ -622,10 +794,38 @@ app.delete(
   '/api/teams/:teamId/members/:memberId',
   async (c) => {
     const memberId = c.req.param('memberId')
-    if (!memberId) {
+    const teamId = c.req.param('teamId')
+    if (!memberId || !teamId) {
       return c.json({ message: 'Missing member id' }, 400)
     }
     const db = getDb(c.env)
+    const auth = c.get('auth') as AuthContext
+    const { team, orgAdmin, teamAdmin } = await resolveTeamAdminScope(db, teamId, auth)
+    if (!team) {
+      return c.json({ message: 'Team not found' }, 404)
+    }
+
+    const record = await db
+      .prepare<TeamMembershipRow>('SELECT * FROM team_memberships WHERE id = ?')
+      .bind(memberId)
+      .first()
+
+    if (!record) {
+      return c.json({ message: 'Member not found' }, 404)
+    }
+
+    if (record.team_id !== teamId) {
+      return c.json({ message: 'Membership does not belong to this team' }, 400)
+    }
+
+    if (!isMainAdmin(auth) && !orgAdmin && !teamAdmin) {
+      return c.json({ message: 'Admin access required for this team' }, 403)
+    }
+
+    if (record.role === 'team_admin' && !isMainAdmin(auth) && !orgAdmin) {
+      return c.json({ message: 'Cannot remove another team admin' }, 403)
+    }
+
     await db.prepare('DELETE FROM team_memberships WHERE id = ?').bind(memberId).run()
     return c.json({ message: 'Member removed' })
   }
