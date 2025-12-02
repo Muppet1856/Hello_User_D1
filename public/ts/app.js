@@ -3,6 +3,7 @@ const state = {
   users: [],
   orgs: [],
   teams: [],
+  orgMembers: [],
   teamMembers: [],
   passkeys: [],
   selectedOrgId: null,
@@ -17,6 +18,27 @@ const ROLE_OPTIONS = ['admin', 'org_admin', 'team_admin', 'statistician', 'membe
 
 const hasRoleInOrganizations = (role) => state.userOrganizations.some((org) => org.role === role)
 const hasRoleInTeams = (role) => state.userTeams.some((team) => team.role === role)
+
+const getManagedOrgs = () => {
+  if (hasRoleInOrganizations('admin')) return state.orgs
+  return state.orgs.filter((org) =>
+    state.userOrganizations.some((membership) => membership.id === org.id && membership.role === 'org_admin')
+  )
+}
+
+const getManagedTeams = () => {
+  if (hasRoleInOrganizations('admin')) return state.teams
+  const managedOrgIds = state.userOrganizations
+    .filter((membership) => membership.role === 'org_admin')
+    .map((membership) => membership.id)
+  if (hasRoleInTeams('team_admin')) {
+    const teamAdminIds = state.userTeams
+      .filter((team) => team.role === 'team_admin')
+      .map((team) => team.id)
+    return state.teams.filter((team) => managedOrgIds.includes(team.organizationId) || teamAdminIds.includes(team.id))
+  }
+  return state.teams.filter((team) => managedOrgIds.includes(team.organizationId))
+}
 
 const PAGE_CONFIG = [
   {
@@ -56,9 +78,12 @@ const getAccessiblePages = () => PAGE_CONFIG.filter((page) => page.predicate())
 const alertContainer = document.getElementById('status-alert')
 const accountProfile = document.getElementById('account-profile')
 const teamOrgSelect = document.getElementById('team-org-select')
+const orgAdminSelect = document.getElementById('org-admin-select')
 const teamSelect = document.getElementById('team-select')
 const teamRoleSelect = document.getElementById('team-role-select')
 const teamRoleFormSelect = document.getElementById('team-role-form-select')
+const orgRoleSelect = document.getElementById('org-role-select')
+const orgInviteLink = document.getElementById('org-invite-link')
 const dynamicNav = document.getElementById('dynamic-nav')
 const pageSections = Array.from(document.querySelectorAll('[data-page-section]'))
 
@@ -86,6 +111,30 @@ const showAlert = (message, variant = 'info') => {
 
 const clearAlert = () => {
   alertContainer.innerHTML = ''
+}
+
+const enablePasskeyForms = (enabled) => {
+  document.querySelectorAll('[data-requires-session] input, [data-requires-session] button').forEach((el) => {
+    el.disabled = !enabled
+  })
+}
+
+const buildInviteLink = ({ scopeType, scopeId, role }) => {
+  const url = new URL(window.location.href)
+  url.searchParams.set('scope', `${scopeType}:${scopeId}`)
+  url.searchParams.set('role', role)
+  const token = document.getElementById('magic-token')?.value?.trim()
+  if (token) url.searchParams.set('token', token)
+  return url.toString()
+}
+
+const handleOrgSelectionChange = async (orgId) => {
+  state.selectedOrgId = orgId
+  if (teamOrgSelect) teamOrgSelect.value = orgId || ''
+  if (orgAdminSelect) orgAdminSelect.value = orgId || ''
+  if (orgInviteLink) orgInviteLink.textContent = ''
+  await loadOrgMembers(orgId)
+  await loadTeams(orgId)
 }
 
 const showPage = (pageId) => {
@@ -129,6 +178,12 @@ const setCurrentSession = (session) => {
   state.session = session
   state.userOrganizations = session?.organizations ?? []
   state.userTeams = session?.teams ?? []
+  if (!session) {
+    state.orgMembers = []
+    state.teamMembers = []
+    state.selectedOrgId = null
+    state.selectedTeamId = null
+  }
   setCurrentUser(session?.user ?? null)
   renderNavLinks()
   const targetPage = session ? 'account' : 'landing'
@@ -148,6 +203,7 @@ const handleLoginSuccess = async (payload) => {
   if (!payload) return
   if (payload.session) {
     setCurrentSession(payload.session)
+    await loadOrgs()
     return
   }
   const userId =
@@ -156,6 +212,7 @@ const handleLoginSuccess = async (payload) => {
   const session = await loadSessionById(userId)
   if (session) {
     setCurrentSession(session)
+    await loadOrgs()
   }
 }
 
@@ -185,9 +242,11 @@ const setCurrentUser = (user) => {
   if (user) {
     document.getElementById('magic-verify-email').value = user.email
     loadPasskeys()
+    enablePasskeyForms(true)
   } else {
     state.passkeys = []
     renderPasskeys()
+    enablePasskeyForms(false)
   }
 }
 
@@ -274,14 +333,43 @@ const renderOrgList = () => {
     .join('')
 }
 
+const renderOrgMembers = () => {
+  const list = document.getElementById('org-members')
+  if (!list) return
+  if (!state.orgMembers.length) {
+    list.innerHTML = '<li class="list-group-item text-muted">No members added yet.</li>'
+    return
+  }
+  list.innerHTML = state.orgMembers
+    .map((member) => {
+      const canRemove = member.role !== 'org_admin'
+      return `
+        <li class="list-group-item d-flex justify-content-between align-items-center">
+          <div>
+            <div class="fw-semibold">${member.email}</div>
+            <div class="text-muted small">${[member.first_name, member.last_name].filter(Boolean).join(' ')}</div>
+            <span class="badge bg-secondary mt-1">${member.role}</span>
+          </div>
+          <button class="btn btn-sm btn-outline-danger" data-org-remove="${member.id}" ${
+            canRemove ? '' : 'disabled'
+          }>
+            ${canRemove ? 'Remove' : 'Locked'}
+          </button>
+        </li>
+      `
+    })
+    .join('')
+}
+
 const renderTeamList = () => {
   const container = document.getElementById('team-list')
-  if (!state.teams.length) {
+  const visibleTeams = getManagedTeams()
+  if (!visibleTeams.length) {
     container.innerHTML =
       '<div class="col"><div class="border border-dashed rounded-3 p-4 text-muted text-center">No teams created yet.</div></div>'
     return
   }
-  container.innerHTML = state.teams
+  container.innerHTML = visibleTeams
     .map(
       (team) => `
         <div class="col">
@@ -323,8 +411,10 @@ const renderTeamMembers = () => {
             <div class="text-muted small">${[member.first_name, member.last_name].filter(Boolean).join(' ')}</div>
             <span class="badge bg-secondary mt-1">${member.role}</span>
           </div>
-          <button class="btn btn-sm btn-outline-danger" data-team-remove="${member.id}">
-            Remove
+          <button class="btn btn-sm btn-outline-danger" data-team-remove="${member.id}" ${
+            member.role === 'team_admin' ? 'disabled' : ''
+          }>
+            ${member.role === 'team_admin' ? 'Locked' : 'Remove'}
           </button>
         </li>
       `
@@ -362,21 +452,27 @@ const renderPasskeys = () => {
 
 const updateTeamOrgSelect = () => {
   if (!teamOrgSelect) return
-  teamOrgSelect.innerHTML = state.orgs.map((org) => `<option value="${org.id}">${org.name}</option>`).join('')
-  if (state.orgs.length) {
-    state.selectedOrgId = state.selectedOrgId || state.orgs[0].id
+  const manageableOrgs = getManagedOrgs()
+  teamOrgSelect.innerHTML = manageableOrgs.map((org) => `<option value="${org.id}">${org.name}</option>`).join('')
+  if (manageableOrgs.length) {
+    state.selectedOrgId = state.selectedOrgId || manageableOrgs[0].id
     teamOrgSelect.value = state.selectedOrgId
   } else {
     state.selectedOrgId = null
     teamOrgSelect.innerHTML = '<option value="">No organizations</option>'
   }
+  if (orgAdminSelect) {
+    orgAdminSelect.innerHTML = manageableOrgs.map((org) => `<option value="${org.id}">${org.name}</option>`).join('')
+    orgAdminSelect.value = state.selectedOrgId || ''
+  }
 }
 
 const updateTeamSelectOptions = () => {
   if (!teamSelect) return
-  teamSelect.innerHTML = state.teams.map((team) => `<option value="${team.id}">${team.name}</option>`).join('')
-  if (state.teams.length) {
-    state.selectedTeamId = state.selectedTeamId || state.teams[0].id
+  const manageableTeams = getManagedTeams()
+  teamSelect.innerHTML = manageableTeams.map((team) => `<option value="${team.id}">${team.name}</option>`).join('')
+  if (manageableTeams.length) {
+    state.selectedTeamId = state.selectedTeamId || manageableTeams[0].id
     teamSelect.value = state.selectedTeamId
   } else {
     state.selectedTeamId = null
@@ -386,14 +482,20 @@ const updateTeamSelectOptions = () => {
 
 const updateMemberUserSelect = () => {
   const select = document.getElementById('team-user-select')
-  if (!select) return
+  const orgSelect = document.getElementById('org-user-select')
+  if (!select && !orgSelect) return
   if (!state.users.length) {
-    select.innerHTML = '<option value="">Create a user first</option>'
-    select.disabled = true
+    if (select) {
+      select.innerHTML = '<option value="">Create a user first</option>'
+      select.disabled = true
+    }
+    if (orgSelect) {
+      orgSelect.innerHTML = '<option value="">Create a user first</option>'
+      orgSelect.disabled = true
+    }
     return
   }
-  select.disabled = false
-  select.innerHTML = state.users
+  const html = state.users
     .map(
       (user) =>
         `<option value="${user.id}">${user.email} (${[user.firstName, user.lastName]
@@ -401,12 +503,21 @@ const updateMemberUserSelect = () => {
           .join(' ')})</option>`
     )
     .join('')
+  if (select) {
+    select.disabled = false
+    select.innerHTML = html
+  }
+  if (orgSelect) {
+    orgSelect.disabled = false
+    orgSelect.innerHTML = html
+  }
 }
 
 const fillRoleSelects = () => {
   const html = ROLE_OPTIONS.map((role) => `<option value="${role}">${role}</option>`).join('')
   if (teamRoleSelect) teamRoleSelect.innerHTML = html
   if (teamRoleFormSelect) teamRoleFormSelect.innerHTML = html
+  if (orgRoleSelect) orgRoleSelect.innerHTML = html
 }
 
 const loadUsers = async () => {
@@ -429,6 +540,7 @@ const loadOrgs = async () => {
   state.orgs = data.organizations ?? []
   renderOrgList()
   updateTeamOrgSelect()
+  await loadOrgMembers(state.selectedOrgId)
   if (state.selectedOrgId) {
     await loadTeams(state.selectedOrgId)
   } else {
@@ -438,6 +550,21 @@ const loadOrgs = async () => {
     state.teamMembers = []
     renderTeamMembers()
   }
+}
+
+const loadOrgMembers = async (orgId) => {
+  if (!orgId) {
+    state.orgMembers = []
+    renderOrgMembers()
+    return
+  }
+  const { ok, data } = await fetchJson(`/api/organizations/${orgId}/members`)
+  if (!ok) {
+    showAlert(data.message || 'Unable to load org members', 'danger')
+    return
+  }
+  state.orgMembers = data.members ?? []
+  renderOrgMembers()
 }
 
 const loadTeams = async (orgId) => {
@@ -455,7 +582,8 @@ const loadTeams = async (orgId) => {
     return
   }
   state.teams = data.teams ?? []
-  state.selectedTeamId = state.teams.length ? state.teams[0].id : null
+  const manageableTeams = getManagedTeams()
+  state.selectedTeamId = manageableTeams.length ? manageableTeams[0].id : null
   renderTeamList()
   updateTeamSelectOptions()
   if (state.selectedTeamId) {
@@ -614,9 +742,49 @@ document.getElementById('org-list').addEventListener('click', async (event) => {
   }
 })
 
+document.getElementById('add-org-member-form').addEventListener('submit', async (event) => {
+  event.preventDefault()
+  if (!state.selectedOrgId) {
+    showAlert('Select an organization you administer first', 'warning')
+    return
+  }
+  const form = event.currentTarget
+  const payload = Object.fromEntries(new FormData(form))
+  const { ok, data } = await fetchJson(`/api/organizations/${state.selectedOrgId}/members`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+  const inviteLink = buildInviteLink({ scopeType: 'org', scopeId: state.selectedOrgId, role: payload.role })
+  const inviteMessage = `${data.message || 'Member invited to org'}<div class="small mt-2">Invite link: <a href="${inviteLink}" class="link-primary">${inviteLink}</a></div>`
+  showAlert(inviteMessage, ok ? 'success' : 'danger')
+  if (ok) {
+    form.reset()
+    if (orgInviteLink) orgInviteLink.textContent = `Share this org invitation: ${inviteLink}`
+    await loadOrgMembers(state.selectedOrgId)
+  }
+})
+
+document.getElementById('org-members').addEventListener('click', async (event) => {
+  const button = event.target.closest('[data-org-remove]')
+  if (!button || !state.selectedOrgId) return
+  const memberId = button.dataset.orgRemove
+  const member = state.orgMembers.find((m) => m.id === memberId)
+  if (member?.role === 'org_admin') return
+  const { ok, data } = await fetchJson(`/api/organizations/${state.selectedOrgId}/members/${memberId}`, {
+    method: 'DELETE',
+  })
+  showAlert(data.message || 'Member removed', ok ? 'success' : 'danger')
+  if (ok) {
+    await loadOrgMembers(state.selectedOrgId)
+  }
+})
+
 document.getElementById('team-org-select').addEventListener('change', async (event) => {
-  state.selectedOrgId = event.target.value
-  await loadTeams(state.selectedOrgId)
+  await handleOrgSelectionChange(event.target.value)
+})
+
+document.getElementById('org-admin-select').addEventListener('change', async (event) => {
+  await handleOrgSelectionChange(event.target.value)
 })
 
 document.getElementById('team-select').addEventListener('change', async (event) => {
@@ -682,7 +850,9 @@ document.getElementById('add-team-member-form').addEventListener('submit', async
     method: 'POST',
     body: JSON.stringify(payload),
   })
-  showAlert(data.message || 'Member assigned', ok ? 'success' : 'danger')
+  const inviteLink = buildInviteLink({ scopeType: 'team', scopeId: state.selectedTeamId, role: payload.role })
+  const inviteMessage = `${data.message || 'Member assigned'}<div class="small mt-2">Invite link: <a href="${inviteLink}" class="link-primary">${inviteLink}</a></div>`
+  showAlert(inviteMessage, ok ? 'success' : 'danger')
   if (ok) {
     form.reset()
     await loadTeamMembers(state.selectedTeamId)
@@ -693,6 +863,8 @@ document.getElementById('team-members').addEventListener('click', async (event) 
   const button = event.target.closest('[data-team-remove]')
   if (!button || !state.selectedTeamId) return
   const memberId = button.dataset.teamRemove
+  const member = state.teamMembers.find((m) => m.id === memberId)
+  if (member?.role === 'team_admin') return
   const { ok, data } = await fetchJson(`/api/teams/${state.selectedTeamId}/members/${memberId}`, {
     method: 'DELETE',
   })
@@ -739,10 +911,12 @@ const init = async () => {
   await Promise.all([loadUsers(), loadOrgs()])
   renderUsers()
   renderOrgList()
+  renderOrgMembers()
   renderTeamList()
   renderTeamMembers()
   renderPasskeys()
   renderAccount()
+  enablePasskeyForms(Boolean(state.currentUser))
 }
 
 init()

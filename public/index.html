@@ -101,41 +101,6 @@
                 </form>
               </div>
             </div>
-            <div class="card shadow-sm">
-              <div class="card-body">
-                <h5 class="card-title">Passkeys</h5>
-                <p class="text-muted">Link registered devices to your account.</p>
-                <form id="passkey-register-form" class="row g-2">
-                  <div class="col-12">
-                    <label for="passkey-device" class="form-label">Device name</label>
-                    <input
-                      id="passkey-device"
-                      name="name"
-                      class="form-control"
-                      placeholder="Work Mac, personal phone"
-                    />
-                  </div>
-                  <div class="col-12">
-                    <button type="submit" class="btn btn-success w-100">Register passkey</button>
-                  </div>
-                </form>
-                <form id="passkey-auth-form" class="row g-2 mt-3">
-                  <div class="col-12">
-                    <label for="passkey-credential-id" class="form-label">Credential ID</label>
-                    <input
-                      id="passkey-credential-id"
-                      name="credentialId"
-                      class="form-control"
-                      placeholder="Paste a credential id"
-                    />
-                  </div>
-                  <div class="col-12">
-                    <button type="submit" class="btn btn-outline-success w-100">Authenticate</button>
-                  </div>
-                </form>
-                <div id="passkey-list" class="mt-3"></div>
-              </div>
-            </div>
           </div>
         </div>
       </section>
@@ -145,8 +110,11 @@
           <div class="card-body">
             <div class="d-flex flex-wrap align-items-center justify-content-between mb-3 gap-3">
               <div>
-                <h3 class="h4 mb-0">Admin console</h3>
-                <p class="text-muted mb-0">Invite members, monitor email verification, and copy IDs.</p>
+                <h3 class="h4 mb-0">Main admin console</h3>
+                <p class="text-muted mb-0">
+                  Create organizations, invite org admins with the correct rights encoded in a magic link,
+                  and keep user records tidy.
+                </p>
               </div>
               <button id="refresh-users" class="btn btn-outline-primary">Refresh users</button>
             </div>
@@ -191,8 +159,11 @@
           <div class="card-body">
             <div class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-3">
               <div>
-                <h3 class="h4 mb-1">Organization management</h3>
-                <p class="text-muted mb-0">Create orgs, track slugs, and remove stale seats.</p>
+                <h3 class="h4 mb-1">Organization admins</h3>
+                <p class="text-muted mb-0">
+                  Administer only the organizations where you hold org admin rights. Create teams, invite members,
+                  and use encoded invitation links that mirror magic links.
+                </p>
               </div>
               <form id="create-org-form" class="row g-2 align-items-end">
                 <div class="col-auto">
@@ -214,7 +185,49 @@
                 </div>
               </form>
             </div>
-            <div id="org-list" class="row row-cols-1 row-cols-md-2 g-3"></div>
+            <div class="row g-3 mt-3">
+              <div class="col-lg-5">
+                <label class="form-label">Organization to administer</label>
+                <select id="org-admin-select" class="form-select"></select>
+                <p class="text-muted small mt-2 mb-0">
+                  Invitations should carry the target role and org in the link. Pair the magic link token with the
+                  invite URL shown after you add a member.
+                </p>
+                <div id="org-invite-link" class="small mt-2 text-break text-muted"></div>
+              </div>
+              <div class="col-lg-7">
+                <div class="card bg-light h-100">
+                  <div class="card-body">
+                    <h5 class="card-title">Organization members</h5>
+                    <p class="text-muted small">Org admins cannot remove other org admins.</p>
+                    <div class="d-flex flex-column flex-lg-row gap-3">
+                      <div class="flex-grow-1">
+                        <ul id="org-members" class="list-group list-group-flush"></ul>
+                      </div>
+                      <div class="flex-grow-1">
+                        <form id="add-org-member-form" class="row g-2">
+                          <div class="col-12">
+                            <label for="org-user-select" class="form-label">User</label>
+                            <select id="org-user-select" class="form-select"></select>
+                          </div>
+                          <div class="col-12">
+                            <label for="org-role-select" class="form-label">Role</label>
+                            <select id="org-role-select" class="form-select"></select>
+                          </div>
+                          <div class="col-12 d-grid">
+                            <button type="submit" class="btn btn-success">Invite to org</button>
+                          </div>
+                        </form>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="mt-4">
+              <h5 class="mb-2">All organizations</h5>
+              <div id="org-list" class="row row-cols-1 row-cols-md-2 g-3"></div>
+            </div>
           </div>
         </div>
       </section>
@@ -224,8 +237,11 @@
           <div class="card-body">
             <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
               <div>
-                <h3 class="h4 mb-0">Team management</h3>
-                <p class="text-muted mb-0">Create teams, assign roles, and add members.</p>
+                <h3 class="h4 mb-0">Team admins</h3>
+                <p class="text-muted mb-0">
+                  Administer teams you are a team admin for. Invite members with the right roles encoded in your
+                  invitation links and magic links. Team admins cannot remove other team admins.
+                </p>
               </div>
               <button id="refresh-teams" class="btn btn-outline-secondary">Reload teams</button>
             </div>
@@ -312,6 +328,47 @@
                 <button type="submit" class="btn btn-dark">Update my info</button>
               </div>
             </form>
+            <hr />
+            <div class="card bg-light">
+              <div class="card-body">
+                <h5 class="card-title">Passkeys</h5>
+                <p class="text-muted">
+                  Register devices or authenticate only after you have created your account. The forms stay disabled
+                  until you sign in.
+                </p>
+                <form id="passkey-register-form" class="row g-2" data-requires-session>
+                  <div class="col-12">
+                    <label for="passkey-device" class="form-label">Device name</label>
+                    <input
+                      id="passkey-device"
+                      name="name"
+                      class="form-control"
+                      placeholder="Work Mac, personal phone"
+                      disabled
+                    />
+                  </div>
+                  <div class="col-12">
+                    <button type="submit" class="btn btn-success w-100" disabled>Register passkey</button>
+                  </div>
+                </form>
+                <form id="passkey-auth-form" class="row g-2 mt-3" data-requires-session>
+                  <div class="col-12">
+                    <label for="passkey-credential-id" class="form-label">Credential ID</label>
+                    <input
+                      id="passkey-credential-id"
+                      name="credentialId"
+                      class="form-control"
+                      placeholder="Paste a credential id"
+                      disabled
+                    />
+                  </div>
+                  <div class="col-12">
+                    <button type="submit" class="btn btn-outline-success w-100" disabled>Authenticate</button>
+                  </div>
+                </form>
+                <div id="passkey-list" class="mt-3"></div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
