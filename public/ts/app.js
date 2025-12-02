@@ -26,6 +26,28 @@ const getManagedOrgs = () => {
   )
 }
 
+const getTeamScopedOrgs = () => {
+  const orgAdminOrgs = getManagedOrgs()
+  if (hasRoleInOrganizations('admin')) return orgAdminOrgs
+
+  const teamAdminOrgIds = [
+    ...new Set(
+      state.userTeams
+        .filter((team) => team.role === 'team_admin')
+        .map((team) => team.organizationId)
+        .filter(Boolean)
+    ),
+  ]
+  const teamAdminOrgs = state.orgs.filter((org) => teamAdminOrgIds.includes(org.id))
+
+  const combined = [...orgAdminOrgs]
+  teamAdminOrgs.forEach((org) => {
+    if (!combined.some((entry) => entry.id === org.id)) combined.push(org)
+  })
+
+  return combined
+}
+
 const getManagedTeams = () => {
   if (hasRoleInOrganizations('admin')) return state.teams
   const managedOrgIds = state.userOrganizations
@@ -133,7 +155,12 @@ const handleOrgSelectionChange = async (orgId) => {
   if (teamOrgSelect) teamOrgSelect.value = orgId || ''
   if (orgAdminSelect) orgAdminSelect.value = orgId || ''
   if (orgInviteLink) orgInviteLink.textContent = ''
-  await loadOrgMembers(orgId)
+  if (getManagedOrgs().some((org) => org.id === orgId)) {
+    await loadOrgMembers(orgId)
+  } else {
+    state.orgMembers = []
+    renderOrgMembers()
+  }
   await loadTeams(orgId)
 }
 
@@ -305,6 +332,7 @@ const renderUsers = () => {
 
 const renderOrgList = () => {
   const container = document.getElementById('org-list')
+  const canDeleteOrgs = hasRoleInOrganizations('admin')
   if (!state.orgs.length) {
     container.innerHTML =
       '<div class="col"><div class="border border-dashed rounded-3 p-4 text-muted text-center">No organizations yet.</div></div>'
@@ -323,7 +351,11 @@ const renderOrgList = () => {
               <p class="text-muted small mb-4">Created ${new Date(org.createdAt).toLocaleDateString()}</p>
               <div class="mt-auto d-flex justify-content-between">
                 <span class="text-muted small">ID ${org.id}</span>
-                <button class="btn btn-sm btn-outline-danger" data-org-delete="${org.id}">Delete</button>
+                ${
+                  canDeleteOrgs
+                    ? `<button class="btn btn-sm btn-outline-danger" data-org-delete="${org.id}">Delete</button>`
+                    : '<span class="text-muted small">Admin-only</span>'
+                }
               </div>
             </div>
           </div>
@@ -452,18 +484,30 @@ const renderPasskeys = () => {
 
 const updateTeamOrgSelect = () => {
   if (!teamOrgSelect) return
-  const manageableOrgs = getManagedOrgs()
-  teamOrgSelect.innerHTML = manageableOrgs.map((org) => `<option value="${org.id}">${org.name}</option>`).join('')
-  if (manageableOrgs.length) {
-    state.selectedOrgId = state.selectedOrgId || manageableOrgs[0].id
+  const teamScopedOrgs = getTeamScopedOrgs()
+  const orgAdminOrgs = getManagedOrgs()
+  const preferredOrgId =
+    (state.selectedOrgId && teamScopedOrgs.some((org) => org.id === state.selectedOrgId))
+      ? state.selectedOrgId
+      : teamScopedOrgs[0]?.id ?? orgAdminOrgs[0]?.id ?? null
+
+  state.selectedOrgId = preferredOrgId
+
+  teamOrgSelect.innerHTML = teamScopedOrgs.map((org) => `<option value="${org.id}">${org.name}</option>`).join('')
+  if (teamScopedOrgs.length) {
     teamOrgSelect.value = state.selectedOrgId
   } else {
-    state.selectedOrgId = null
     teamOrgSelect.innerHTML = '<option value="">No organizations</option>'
   }
+
   if (orgAdminSelect) {
-    orgAdminSelect.innerHTML = manageableOrgs.map((org) => `<option value="${org.id}">${org.name}</option>`).join('')
-    orgAdminSelect.value = state.selectedOrgId || ''
+    orgAdminSelect.innerHTML = orgAdminOrgs.map((org) => `<option value="${org.id}">${org.name}</option>`).join('')
+    if (orgAdminOrgs.some((org) => org.id === state.selectedOrgId)) {
+      orgAdminSelect.value = state.selectedOrgId
+    } else {
+      orgAdminSelect.value = orgAdminOrgs[0]?.id ?? ''
+      if (!teamScopedOrgs.length && orgAdminOrgs.length) state.selectedOrgId = orgAdminOrgs[0].id
+    }
   }
 }
 
@@ -540,7 +584,13 @@ const loadOrgs = async () => {
   state.orgs = data.organizations ?? []
   renderOrgList()
   updateTeamOrgSelect()
-  await loadOrgMembers(state.selectedOrgId)
+  const canManageOrgMembers = getManagedOrgs().some((org) => org.id === state.selectedOrgId)
+  if (canManageOrgMembers) {
+    await loadOrgMembers(state.selectedOrgId)
+  } else {
+    state.orgMembers = []
+    renderOrgMembers()
+  }
   if (state.selectedOrgId) {
     await loadTeams(state.selectedOrgId)
   } else {
@@ -716,6 +766,10 @@ document.getElementById('users-table-body').addEventListener('click', (event) =>
 
 document.getElementById('create-org-form').addEventListener('submit', async (event) => {
   event.preventDefault()
+  if (!hasRoleInOrganizations('admin')) {
+    showAlert('Only admins can create organizations', 'warning')
+    return
+  }
   const form = event.currentTarget
   const payload = Object.fromEntries(new FormData(form))
   const { ok, data } = await fetchJson('/api/organizations', {
@@ -732,6 +786,10 @@ document.getElementById('create-org-form').addEventListener('submit', async (eve
 document.getElementById('org-list').addEventListener('click', async (event) => {
   const button = event.target.closest('[data-org-delete]')
   if (!button) return
+  if (!hasRoleInOrganizations('admin')) {
+    showAlert('Only admins can delete organizations', 'warning')
+    return
+  }
   const orgId = button.dataset.orgDelete
   const { ok, data } = await fetchJson(`/api/organizations/${orgId}`, {
     method: 'DELETE',
