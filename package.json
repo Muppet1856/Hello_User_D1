@@ -1,0 +1,31 @@
+{
+  "name": "hello_user_d1",
+  "version": "1.0.0",
+  "description": "Cloudflare Worker for Hello User D1 using Hono",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "wrangler build",
+    "dev": "wrangler dev"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Muppet1856/Hello_User_D1.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/Muppet1856/Hello_User_D1/issues"
+  },
+  "homepage": "https://github.com/Muppet1856/Hello_User_D1#readme",
+  "dependencies": {
+    "@hono/zod-validator": "^0.7.5",
+    "hono": "^4.10.7",
+    "zod": "^4.1.13"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20251202.0",
+    "typescript": "^5.9.3"
+  }
+}
