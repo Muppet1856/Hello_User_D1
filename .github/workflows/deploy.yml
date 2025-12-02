@@ -8,10 +8,6 @@ on:
     types: [ opened, synchronize ]
     paths-ignore: [ '**/.github/**', '**/README.md' ]
   workflow_dispatch:
-    inputs:
-      badge_label:
-        description: 'Override badge label (defaults to branch/PR name or "production")'
-        required: false
 
 concurrency:
   group: deploy-${{ github.event_name }}-${{ github.ref }}
@@ -336,72 +332,3 @@ jobs:
               body: `Preview: ${{ env.PREVIEW_URL }}`
             });
 
-      # ————————————————————————
-      # Update README Badge
-      # ————————————————————————
-      - name: Update README Preview Badge
-        if: steps.cfg.outputs.type != 'skip'
-        run: |
-          set -euo pipefail
-
-          URL="${{ env.PREVIEW_URL }}"
-          LABEL="${{ steps.cfg.outputs.badge_label }}"
-          CLEAN_LABEL=$(echo "$LABEL" | tr -d '-')
-          SHIELD_URL="https://img.shields.io/badge/preview-${CLEAN_LABEL}-purple?label=preview"
-          BADGE="[![preview](${SHIELD_URL})](${URL})"
-
-          START="<!-- PREVIEW_BADGE_START -->"
-          END="<!-- PREVIEW_BADGE_END -->"
-          FILE="README.md"
-
-          grep -qF "$START" "$FILE" && grep -qF "$END" "$FILE" || {
-            echo "Error: Missing badge markers in $FILE" >&2
-            exit 1
-          }
-
-          ESCAPED_START=$(printf '%s\n' "$START" | sed 's/[&/\]/\\&/g')
-          ESCAPED_END=$(printf '%s\n' "$END" | sed 's/[&/\]/\\&/g')
-          ESCAPED_BADGE=$(printf '%s\n' "$BADGE" | sed 's/[&/\]/\\&/g')
-
-          cp "$FILE" "$FILE.tmp"
-          sed -i "s|${ESCAPED_START}.*${ESCAPED_END}|${ESCAPED_START}${ESCAPED_BADGE}${ESCAPED_END}|" "$FILE.tmp"
-
-          if ! cmp -s "$FILE" "$FILE.tmp"; then
-            mv "$FILE.tmp" "$FILE"
-            echo "Badge updated: preview-${CLEAN_LABEL} to $URL"
-          else
-            rm "$FILE.tmp"
-            echo "Badge already up-to-date"
-          fi
-
-          grep -qF "$BADGE" "$FILE" || {
-            echo "Error: Badge not inserted!" >&2; cat "$FILE"; exit 1
-          }
-
-      # ————————————————————————
-      # Commit README Update
-      # ————————————————————————
-      - name: Commit README Update
-        if: steps.cfg.outputs.type != 'skip'
-        run: |
-          set -euo pipefail
-
-          if git diff --quiet README.md; then
-            echo "No changes to commit."
-            exit 0
-          fi
-
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            BRANCH_NAME="${{ github.event.pull_request.head.ref }}"
-            echo "Pushing to PR branch: $BRANCH_NAME"
-            git add README.md
-            git commit -m "docs: update preview badge for ${{ steps.cfg.outputs.badge_label }}"
-            git push origin HEAD:refs/heads/$BRANCH_NAME --force
-          else
-            git add README.md
-            git commit -m "docs: update preview badge for ${{ steps.cfg.outputs.badge_label }}"
-            git push
-          fi
