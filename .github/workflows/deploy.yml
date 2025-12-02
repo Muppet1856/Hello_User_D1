@@ -44,7 +44,7 @@ jobs:
 
       - name: Verify src/index.ts
         run: |
-          [ -f "src/index.ts" ] || (echo "Error: src/index.js missing" >&2; exit 1)
+          [ -f "src/index.ts" ] || (echo "Error: src/index.ts missing" >&2; exit 1)
 
       # ————————————————————————
       # Install Tools
@@ -132,7 +132,7 @@ jobs:
 
           cat > wrangler.toml <<EOF
           name = "${FINAL_NAME}"
-          main = "src/index.js"
+          main = "src/index.ts"
           compatibility_date = "${COMPAT_DATE}"
           EOF
 
