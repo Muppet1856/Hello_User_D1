@@ -312,8 +312,8 @@ jobs:
       - name: Add secrets programmatically
         run: |
           # Pipe secrets to wrangler put (overwrites if exists)
-          echo "${{ secrets.JWT_SECRET }}" | wrangler secret put JWT_SECRET --name hello-user
-          echo "${{ secrets.RESEND_API_KEY }}" | wrangler secret put RESEND_API_KEY --name hello-user
+          echo "${{ secrets.JWT_SECRET }}" | npx wrangler secret put JWT_SECRET --name hello-user
+          echo "${{ secrets.RESEND_API_KEY }}" | npx wrangler secret put RESEND_API_KEY --name hello-user
 
       # ————————————————————————
       # Deploy Worker
