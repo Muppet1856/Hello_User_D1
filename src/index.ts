@@ -10,6 +10,7 @@ import {
   passkeyAuthSchema,
   passkeyRegisterSchema,
   roleEnum,
+  invitationPayloadSchema,
   teamMemberPayloadSchema,
   teamPayloadSchema,
   userUpdateSchema,
@@ -93,6 +94,26 @@ type MagicLinkRow = {
   expires_at: string
 }
 
+type UserRoleRow = {
+  id: string
+  user_id: string
+  role: string
+  org_id: string | null
+  team_id: string | null
+  created_at: string
+}
+
+type InvitationRow = {
+  id: string
+  token: string
+  email: string
+  role: string
+  org_id: string | null
+  team_id: string | null
+  expires_at: string
+  created_by: string
+}
+
 type PasskeyRow = {
   id: string
   user_id: string
@@ -144,6 +165,56 @@ const parseAuth = (request: Request): AuthContext | null => {
 }
 
 const isMainAdmin = (auth: AuthContext) => auth.roles.includes('main_admin')
+
+const encoder = new TextEncoder()
+const decoder = new TextDecoder()
+const toBase64Url = (input: Uint8Array | ArrayBuffer) =>
+  btoa(String.fromCharCode(...new Uint8Array(input)))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '')
+
+const fromBase64Url = (value: string) => {
+  const normalized = value.replace(/-/g, '+').replace(/_/g, '/')
+  const padded = normalized.padEnd(normalized.length + ((4 - (normalized.length % 4 || 4)) % 4), '=')
+  const binary = atob(padded)
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i)
+  }
+  return bytes
+}
+
+const getSigningSecret = (env: Env) => env.RESEND_API_KEY ?? env.APP_URL ?? 'hello-user-secret'
+
+const getSigningKey = async (env: Env) =>
+  await crypto.subtle.importKey('raw', encoder.encode(getSigningSecret(env)), { name: 'HMAC', hash: 'SHA-256' }, false, [
+    'sign',
+    'verify',
+  ])
+
+const signToken = async (payload: Record<string, unknown>, env: Env) => {
+  const key = await getSigningKey(env)
+  const header = toBase64Url(encoder.encode(JSON.stringify({ alg: 'HS256', typ: 'JWT' })))
+  const body = toBase64Url(encoder.encode(JSON.stringify(payload)))
+  const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(`${header}.${body}`))
+  return `${header}.${body}.${toBase64Url(new Uint8Array(signature))}`
+}
+
+const verifySignedToken = async (token: string, env: Env) => {
+  const [header, body, signature] = token.split('.')
+  if (!header || !body || !signature) return null
+
+  const key = await getSigningKey(env)
+  const valid = await crypto.subtle.verify('HMAC', key, fromBase64Url(signature), encoder.encode(`${header}.${body}`))
+  if (!valid) return null
+
+  const payload = JSON.parse(decoder.decode(fromBase64Url(body))) as Record<string, unknown>
+  const exp = typeof payload.exp === 'number' ? payload.exp : undefined
+  if (exp && Date.now() > exp) return null
+
+  return payload
+}
 
 const toUser = (row: UserRow) => ({
   id: row.id,
@@ -199,6 +270,40 @@ const ensureUser = async (db: D1Database, email: string, firstName?: string, las
   return await createUser(db, email, firstName, lastName)
 }
 
+const fetchUserRoles = async (db: D1Database, userId: string) =>
+  await db
+    .prepare<RowResult<UserRoleRow>>('SELECT * FROM user_roles WHERE user_id = ? ORDER BY created_at DESC')
+    .bind(userId)
+    .all()
+
+const persistScopedRole = async (
+  db: D1Database,
+  userId: string,
+  role: string,
+  orgId: string | null,
+  teamId: string | null
+) => {
+  await db
+    .prepare('INSERT OR IGNORE INTO user_roles (id, user_id, role, org_id, team_id) VALUES (?, ?, ?, ?, ?)')
+    .bind(generateId(), userId, role, orgId, teamId)
+    .run()
+}
+
+const removeScopedRole = async (
+  db: D1Database,
+  userId: string,
+  role: string,
+  orgId: string | null,
+  teamId: string | null
+) => {
+  await db
+    .prepare(
+      'DELETE FROM user_roles WHERE user_id = ? AND role = ? AND IFNULL(org_id, "") = IFNULL(?, "") AND IFNULL(team_id, "") = IFNULL(?, "")'
+    )
+    .bind(userId, role, orgId, teamId)
+    .run()
+}
+
 const getUserDetails = async (db: D1Database, userId: string) => {
   const user = await fetchUserById(db, userId)
   if (!user) return null
@@ -232,6 +337,8 @@ const getUserDetails = async (db: D1Database, userId: string) => {
     .bind(userId)
     .all()
 
+  const roles = await fetchUserRoles(db, userId)
+
   return {
     user: toUser(user),
     organizations: (orgMemberships.results ?? []).map((row) => ({
@@ -252,6 +359,13 @@ const getUserDetails = async (db: D1Database, userId: string) => {
       name: pk.name,
       credentialId: pk.credential_id,
       createdAt: pk.created_at,
+    })),
+    roles: (roles.results ?? []).map((role) => ({
+      id: role.id,
+      role: role.role,
+      orgId: role.org_id,
+      teamId: role.team_id,
+      createdAt: role.created_at,
     })),
   }
 }
@@ -290,6 +404,40 @@ const fetchTeamById = async (db: D1Database, teamId: string) =>
     .bind(teamId)
     .first()
 
+const ensureOrgMembershipRole = async (db: D1Database, orgId: string, userId: string, role: string) => {
+  const existing = await fetchOrgMembershipForUser(db, orgId, userId)
+  if (existing) {
+    if (existing.role !== role) {
+      await db.prepare('UPDATE org_memberships SET role = ? WHERE id = ?').bind(role, existing.id).run()
+    }
+    return existing.id
+  }
+
+  const id = generateId()
+  await db
+    .prepare('INSERT INTO org_memberships (id, organization_id, user_id, role) VALUES (?, ?, ?, ?)')
+    .bind(id, orgId, userId, role)
+    .run()
+  return id
+}
+
+const ensureTeamMembershipRole = async (db: D1Database, teamId: string, userId: string, role: string) => {
+  const existing = await fetchTeamMembershipForUser(db, teamId, userId)
+  if (existing) {
+    if (existing.role !== role) {
+      await db.prepare('UPDATE team_memberships SET role = ? WHERE id = ?').bind(role, existing.id).run()
+    }
+    return existing.id
+  }
+
+  const id = generateId()
+  await db
+    .prepare('INSERT INTO team_memberships (id, team_id, user_id, role) VALUES (?, ?, ?, ?)')
+    .bind(id, teamId, userId, role)
+    .run()
+  return id
+}
+
 const resolveTeamAdminScope = async (db: D1Database, teamId: string, auth: AuthContext) => {
   const team = await fetchTeamById(db, teamId)
   if (!team) return { team: null, orgAdmin: false, teamAdmin: false }
@@ -320,7 +468,7 @@ const fetchTeamMembers = async (db: D1Database, teamId: string) => {
 
 // Routes --------------------------------------------------------
 
-app.use(['/api/admin/*', '/api/organizations', '/api/organizations/*', '/api/teams/*'], async (c, next) => {
+app.use(['/api/admin/*', '/api/organizations', '/api/organizations/*', '/api/teams/*', '/api/invitations'], async (c, next) => {
   const auth = parseAuth(c.req.raw)
   if (!auth) {
     return c.json({ message: 'Authentication required' }, 401)
@@ -344,8 +492,13 @@ app.post(
     const user = await ensureUser(db, normalized)
     if (!user) return c.json({ message: 'Failed to create user' }, 500)
 
-    const token = randomToken()
     const expiresAt = new Date(Date.now() + 1000 * 60 * 15).toISOString()
+    const payload = {
+      email: normalized,
+      purpose: 'magic-signin',
+      exp: new Date(expiresAt).getTime(),
+    }
+    const token = await signToken(payload, c.env)
     await db
       .prepare(
         'INSERT INTO magic_links (id, user_id, email, token, purpose, expires_at) VALUES (?, ?, ?, ?, ?, ?)'
@@ -369,6 +522,19 @@ app.post(
     const { email, token } = c.req.valid('json')
     const normalized = normalizeEmail(email)
     const db = getDb(c.env)
+    const payload = await verifySignedToken(token, c.env)
+    if (!payload) {
+      return c.json({ message: 'Invalid or expired token' }, 400)
+    }
+
+    if (payload.purpose !== 'magic-signin' && payload.purpose !== 'invitation') {
+      return c.json({ message: 'Unsupported token purpose' }, 400)
+    }
+
+    if (typeof payload.email !== 'string' || normalizeEmail(payload.email) !== normalized) {
+      return c.json({ message: 'Token email mismatch' }, 400)
+    }
+
     const link = await db
       .prepare<MagicLinkRow>(
         'SELECT * FROM magic_links WHERE email = ? AND token = ? ORDER BY created_at DESC LIMIT 1'
@@ -384,12 +550,61 @@ app.post(
       return c.json({ message: 'Token expired' }, 400)
     }
 
+    const invitation = await db
+      .prepare<InvitationRow>('SELECT * FROM invitations WHERE token = ?')
+      .bind(token)
+      .first()
+
+    if (invitation && new Date(invitation.expires_at).getTime() < Date.now()) {
+      return c.json({ message: 'Invitation expired' }, 400)
+    }
+
+    const existingUser = link.user_id
+      ? await fetchUserById(db, link.user_id)
+      : await fetchUserByEmail(db, normalized)
+
+    const user = existingUser ?? (await ensureUser(db, normalized))
+    if (!user) {
+      return c.json({ message: 'Unable to locate user for token' }, 404)
+    }
+
     await db
       .prepare('UPDATE users SET verified = 1 WHERE id = ?')
-      .bind(link.user_id)
+      .bind(user.id)
       .run()
 
-    const details = await getUserDetails(db, link.user_id)
+    const scopedRole = (payload.role as string | undefined) ?? invitation?.role
+    const orgScope = (payload.orgId as string | undefined) ?? invitation?.org_id ?? null
+    const teamScope = (payload.teamId as string | undefined) ?? invitation?.team_id ?? null
+
+    if (orgScope) {
+      const org = await db
+        .prepare<OrganizationRow>('SELECT * FROM organizations WHERE id = ?')
+        .bind(orgScope)
+        .first()
+      if (!org) return c.json({ message: 'Invitation organization not found' }, 404)
+    }
+
+    if (teamScope) {
+      const team = await fetchTeamById(db, teamScope)
+      if (!team) return c.json({ message: 'Invitation team not found' }, 404)
+    }
+
+    if (scopedRole && (orgScope || teamScope)) {
+      await persistScopedRole(db, user.id, scopedRole, orgScope, teamScope)
+      if (orgScope) {
+        await ensureOrgMembershipRole(db, orgScope, user.id, scopedRole)
+      }
+      if (teamScope) {
+        await ensureTeamMembershipRole(db, teamScope, user.id, scopedRole)
+      }
+    }
+
+    if (invitation) {
+      await db.prepare('DELETE FROM invitations WHERE id = ?').bind(invitation.id).run()
+    }
+
+    const details = await getUserDetails(db, user.id)
     if (!details) {
       return c.json({ message: 'Unable to load user after verification' }, 500)
     }
@@ -565,6 +780,61 @@ app.get(
   }
 )
 
+app.post('/api/invitations', zValidator('json', invitationPayloadSchema), async (c) => {
+  const payload = c.req.valid('json')
+  const db = getDb(c.env)
+  const auth = c.get('auth') as AuthContext
+  const normalized = normalizeEmail(payload.email)
+  const expiresAt = new Date(Date.now() + 1000 * 60 * (payload.expiresInMinutes ?? 60 * 24)).toISOString()
+
+  let orgId: string | null = payload.orgId ?? null
+  let teamId: string | null = payload.teamId ?? null
+
+  if (teamId) {
+    const { team, orgAdmin, teamAdmin } = await resolveTeamAdminScope(db, teamId, auth)
+    if (!team) return c.json({ message: 'Team not found' }, 404)
+    if (!isMainAdmin(auth) && !orgAdmin && !teamAdmin) {
+      return c.json({ message: 'Admin access required for this team' }, 403)
+    }
+    orgId = team.organization_id
+  } else if (orgId) {
+    const organization = await db
+      .prepare<OrganizationRow>('SELECT * FROM organizations WHERE id = ?')
+      .bind(orgId)
+      .first()
+    if (!organization) return c.json({ message: 'Organization not found' }, 404)
+    const membership = await fetchOrgMembershipForUser(db, orgId, auth.userId)
+    if (!isMainAdmin(auth) && (!membership || membership.role !== 'org_admin')) {
+      return c.json({ message: 'Org admin role required for this organization' }, 403)
+    }
+  }
+
+  const tokenPayload = {
+    email: normalized,
+    role: payload.role,
+    orgId,
+    teamId,
+    purpose: 'invitation',
+    exp: new Date(expiresAt).getTime(),
+  }
+
+  const token = await signToken(tokenPayload, c.env)
+
+  await db
+    .prepare(
+      'INSERT INTO invitations (id, token, email, role, org_id, team_id, expires_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+    )
+    .bind(generateId(), token, normalized, payload.role, orgId, teamId, expiresAt, auth.userId)
+    .run()
+
+  await db
+    .prepare('INSERT INTO magic_links (id, user_id, email, token, purpose, expires_at) VALUES (?, ?, ?, ?, ?, ?)')
+    .bind(generateId(), null, normalized, token, 'invitation', expiresAt)
+    .run()
+
+  return c.json({ token, expiresAt })
+})
+
 app.post(
   '/api/organizations/:orgId/members',
   zValidator('params', z.object({ orgId: z.string() })),
@@ -584,6 +854,7 @@ app.post(
       .prepare('INSERT INTO org_memberships (id, organization_id, user_id, role) VALUES (?, ?, ?, ?)')
       .bind(generateId(), orgId, payload.userId, payload.role)
       .run()
+    await persistScopedRole(db, payload.userId, payload.role, orgId, null)
     const members = await fetchOrgMembers(db, orgId)
     return c.json({ members })
   }
@@ -621,6 +892,7 @@ app.delete(
     }
 
     await db.prepare('DELETE FROM org_memberships WHERE id = ?').bind(memberId).run()
+    await removeScopedRole(db, record.user_id, record.role, record.organization_id, null)
     return c.json({ message: 'Membership removed' })
   }
 )
@@ -736,6 +1008,7 @@ app.post(
       .prepare('INSERT INTO team_memberships (id, team_id, user_id, role) VALUES (?, ?, ?, ?)')
       .bind(generateId(), teamId, payload.userId, payload.role)
       .run()
+    await persistScopedRole(db, payload.userId, payload.role, team.organization_id, teamId)
     const members = await fetchTeamMembers(db, teamId)
     return c.json({ members })
   }
@@ -779,6 +1052,9 @@ app.patch(
       .prepare('UPDATE team_memberships SET role = ? WHERE id = ?')
       .bind(payload.role, memberId)
       .run()
+
+    await removeScopedRole(db, record.user_id, record.role, team.organization_id, teamId)
+    await persistScopedRole(db, record.user_id, payload.role, team.organization_id, teamId)
 
     const updated = await db
       .prepare<TeamMembershipRow>('SELECT * FROM team_memberships WHERE id = ?')
@@ -827,6 +1103,7 @@ app.delete(
     }
 
     await db.prepare('DELETE FROM team_memberships WHERE id = ?').bind(memberId).run()
+    await removeScopedRole(db, record.user_id, record.role, team.organization_id, teamId)
     return c.json({ message: 'Member removed' })
   }
 )
