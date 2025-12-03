@@ -30,6 +30,19 @@ jobs:
 
     steps:
       # ————————————————————————
+      # Validate Cloudflare credentials early
+      # ————————————————————————
+      - name: Validate Cloudflare credentials
+        if: steps.cfg.outputs.type != 'skip'
+        run: |
+          set -euo pipefail
+          echo "Validating Cloudflare API token..."
+          npx wrangler whoami || {
+            echo "Error: wrangler whoami failed. Check CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID." >&2
+            exit 1
+          }
+
+      # ————————————————————————
       # Checkout
       # ————————————————————————
       - name: Checkout repository
@@ -97,19 +110,6 @@ jobs:
           else
             echo "type=skip" >> $GITHUB_OUTPUT
           fi
-
-      # ————————————————————————
-      # Validate Cloudflare credentials early
-      # ————————————————————————
-      - name: Validate Cloudflare credentials
-        if: steps.cfg.outputs.type != 'skip'
-        run: |
-          set -euo pipefail
-          echo "Validating Cloudflare API token..."
-          npx wrangler whoami || {
-            echo "Error: wrangler whoami failed. Check CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID." >&2
-            exit 1
-          }
 
       # ————————————————————————
       # Setup wrangler.toml + Smart Assets Detection (fixed Bash gotcha)
@@ -305,6 +305,15 @@ jobs:
 
           COUNT=$(jq 'keys | length' "$VARS_JSON")
           echo "Injected $COUNT variable(s) from $VARS_JSON into $TOML"
+
+      # ————————————————————————
+      # Add Secrets
+      # ————————————————————————
+      - name: Add secrets programmatically
+        run: |
+          # Pipe secrets to wrangler put (overwrites if exists)
+          echo "${{ secrets.JWT_SECRET }}" | wrangler secret put JWT_SECRET --name hello-user
+          echo "${{ secrets.RESEND_API_KEY }}" | wrangler secret put RESEND_API_KEY --name hello-user
 
       # ————————————————————————
       # Deploy Worker
