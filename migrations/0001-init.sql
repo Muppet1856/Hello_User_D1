@@ -1,4 +1,4 @@
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
   email TEXT UNIQUE NOT NULL,
   name TEXT,
@@ -7,21 +7,21 @@ CREATE TABLE users (
   passkey TEXT  -- For future passkey support
 );
 
-CREATE TABLE organizations (
+CREATE TABLE IF NOT EXISTS organizations (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   created_by TEXT NOT NULL,  -- References users.id (Main Admin)
   FOREIGN KEY (created_by) REFERENCES users(id)
 );
 
-CREATE TABLE teams (
+CREATE TABLE IF NOT EXISTS teams (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   org_id TEXT NOT NULL,
   FOREIGN KEY (org_id) REFERENCES organizations(id)
 );
 
-CREATE TABLE user_roles (
+CREATE TABLE IF NOT EXISTS user_roles (
   user_id TEXT NOT NULL,
   role TEXT NOT NULL CHECK (role IN ('main_admin', 'org_admin', 'team_admin', 'member')),
   org_id TEXT,
@@ -32,7 +32,7 @@ CREATE TABLE user_roles (
   FOREIGN KEY (team_id) REFERENCES teams(id)
 );
 
-CREATE TABLE invitations (
+CREATE TABLE IF NOT EXISTS invitations (
   id TEXT PRIMARY KEY,
   token TEXT UNIQUE NOT NULL,
   email TEXT NOT NULL,
