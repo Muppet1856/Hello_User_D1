@@ -21,7 +21,7 @@ async function loadMyTeams() {
   accordion.innerHTML = '';
 
   if (!teams.length) {
-    accordion.innerHTML = '<p>You are not an admin for any teams.</p>';
+    accordion.innerHTML = '<p>No teams found.</p>';
     return;
   }
 

@@ -21,7 +21,7 @@ async function loadMyOrgs() {
   accordion.innerHTML = '';
 
   if (!orgs.length) {
-    accordion.innerHTML = '<p>You are not an admin for any organizations.</p>';
+    accordion.innerHTML = '<p>No organizations found.</p>';
     return;
   }
 
@@ -130,4 +130,4 @@ async function loadTeams(orgId) {
 // Initialization function called from app.js
 export function initOrgAdmin() {
   loadMyOrgs();
-}
+} 
