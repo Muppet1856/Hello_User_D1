@@ -1,6 +1,6 @@
 const API_BASE = '/api';
 
-const api = async (path, options = {}) => {
+export const api = async (path, options = {}) => {
   const token = localStorage.getItem('token');
   const headers = {
     'Content-Type': 'application/json',
@@ -72,15 +72,16 @@ async function loadDashboard() {
 
   if (roles.some(r => r.role === 'main_admin')) {
     document.getElementById('main-admin-nav').style.display = 'list-item';
-    // TODO: populate Main Admin tab (create/delete orgs, invite org_admins)
+    const { initMainAdmin } = await import('./main-admin.js');  // Dynamic import
+    initMainAdmin();
   }
   if (roles.some(r => r.role === 'org_admin')) {
     document.getElementById('org-admin-nav').style.display = 'list-item';
-    // TODO: populate Org Admin tab (create teams, invite members, apply roles; cannot remove other org admins)
+    // TODO: Dynamic import for org-admin.js if added
   }
   if (roles.some(r => r.role === 'team_admin')) {
     document.getElementById('team-admin-nav').style.display = 'list-item';
-    // TODO: populate Team Admin tab (invite members, apply roles; cannot remove other team admins)
+    // TODO: Dynamic import for team-admin.js if added
   }
 
   // Activate the first visible tab

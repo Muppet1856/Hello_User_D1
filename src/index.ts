@@ -118,6 +118,68 @@ api.get('/me', async (c) => {
   return c.json(user);
 });
 
+// GET /api/organizations - List all organizations (main_admin only)
+api.get('/organizations', async (c) => {
+  const userRoles = c.get('userRoles');
+  if (!isMainAdmin(userRoles)) {
+    return c.json({ error: 'Forbidden' }, 403);
+  }
+
+  const { results } = await c.env.DB.prepare('SELECT id, name FROM organizations').all();
+  return c.json(results);
+});
+
+// POST /api/organizations - Create a new organization (main_admin only)
+api.post('/organizations', async (c) => {
+  const userRoles = c.get('userRoles');
+  if (!isMainAdmin(userRoles)) {
+    return c.json({ error: 'Forbidden' }, 403);
+  }
+
+  const body = await c.req.json();
+  const { name } = z.object({ name: z.string().min(1) }).parse(body);
+
+  const orgId = crypto.randomUUID();
+  await c.env.DB.prepare('INSERT INTO organizations (id, name) VALUES (?, ?)').bind(orgId, name).run();
+
+  return c.json({ id: orgId, name }, 201);
+});
+
+// POST /api/organizations/:orgId/invite-admin - Invite user as org_admin (main_admin only)
+api.post('/organizations/:orgId/invite-admin', async (c) => {
+  const userRoles = c.get('userRoles');
+  if (!isMainAdmin(userRoles)) {
+    return c.json({ error: 'Forbidden' }, 403);
+  }
+
+  const orgId = c.req.param('orgId');
+  // Verify org exists
+  const org = await c.env.DB.prepare('SELECT id FROM organizations WHERE id = ?').bind(orgId).first();
+  if (!org) {
+    return c.json({ error: 'Organization not found' }, 404);
+  }
+
+  const body = await c.req.json();
+  const { email } = z.object({ email: z.string().email() }).parse(body);
+
+  const token = await jwt.sign(
+    { email, type: 'invite', role: 'org_admin', org_id: orgId, exp: Math.floor(Date.now() / 1000) + 3600 * 24 }, // 24-hour expiry
+    c.env.JWT_SECRET
+  );
+
+  const inviteUrl = `https://grok-hello-user.zellen.workers.dev/?token=${token}`;
+
+  const resend = new Resend(c.env.RESEND_API_KEY);
+  await resend.emails.send({
+    from: 'registration@volleyballscore.app',
+    to: email,
+    subject: 'Invitation to Admin Organization',
+    html: `<p>You've been invited to admin the organization. Click <a href="${inviteUrl}">here</a> to accept (expires in 24 hours).</p>`,
+  });
+
+  return c.json({ success: true });
+});
+
 // More routes (GET/POST orgs, invite, teams, roles) go here - see previous messages for full implementations
 
 // Mount API
