@@ -35,24 +35,6 @@ function isTeamAdminForTeam(roles: any[], teamId: string) {
   return roles.some(r => r.role === 'team_admin' && r.team_id === teamId);
 }
 
-// Auth Middleware - attaches user or 401
-api.use('*', async (c, next) => {
-  const auth = c.req.header('Authorization');
-  if (!auth?.startsWith('Bearer ')) return c.json({ error: 'Unauthorized' }, 401);
-  const token = auth.slice(7);
-  try {
-    if (!await jwt.verify(token, c.env.JWT_SECRET)) throw new Error();
-    const payload = jwt.decode(token).payload as { id: string };
-    const user = await getUserWithRoles(c.env.DB, payload.id);
-    if (!user) throw new Error();
-    c.set('user', user);
-    c.set('userRoles', user.roles);
-    await next();
-  } catch {
-    return c.json({ error: 'Invalid token' }, 401);
-  }
-});
-
 // --- Routes ---
 
 // POST /api/login
@@ -110,6 +92,24 @@ api.get('/verify', async (c) => {
 
   const sessionToken = await jwt.sign({ id: user.id }, c.env.JWT_SECRET, { expiresIn: '30d' });
   return c.json({ token: sessionToken });
+});
+
+// Auth Middleware - attaches user or 401
+api.use('*', async (c, next) => {
+  const auth = c.req.header('Authorization');
+  if (!auth?.startsWith('Bearer ')) return c.json({ error: 'Unauthorized' }, 401);
+  const token = auth.slice(7);
+  try {
+    if (!await jwt.verify(token, c.env.JWT_SECRET)) throw new Error();
+    const payload = jwt.decode(token).payload as { id: string };
+    const user = await getUserWithRoles(c.env.DB, payload.id);
+    if (!user) throw new Error();
+    c.set('user', user);
+    c.set('userRoles', user.roles);
+    await next();
+  } catch {
+    return c.json({ error: 'Invalid token' }, 401);
+  }
 });
 
 // GET /api/me
