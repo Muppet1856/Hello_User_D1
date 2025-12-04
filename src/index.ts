@@ -4,7 +4,7 @@ import jwt from '@tsndr/cloudflare-worker-jwt';
 import { Resend } from 'resend';
 
 type Bindings = {
-  HELLO_USER_DB: D1Database;
+  DB: D1Database;
   JWT_SECRET: string;
   RESEND_API_KEY: string;
   ASSETS: Fetcher;
