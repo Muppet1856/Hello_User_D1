@@ -1,4 +1,4 @@
-import { api } from './app.js';  // Import shared api
+import { api } from './app.js';
 
 // This file handles Main Admin tab population and logic
 
@@ -89,7 +89,10 @@ document.getElementById('create-org-btn').addEventListener('click', async () => 
   }
 });
 
-// Initialization function
+// Initialization function called from app.js
 export function initMainAdmin() {
-  loadOrgs();
+  const mainTabLink = document.querySelector('#main-admin-nav a');
+  if (mainTabLink) {
+    mainTabLink.addEventListener('shown.bs.tab', loadOrgs);
+  }
 }

@@ -93,5 +93,8 @@ async function loadMyTeams() {
 
 // Initialization function called from app.js
 export function initTeamAdmin() {
-  loadMyTeams();
+  const teamTabLink = document.querySelector('#team-admin-nav a');
+  if (teamTabLink) {
+    teamTabLink.addEventListener('shown.bs.tab', loadMyTeams);
+  }
 }

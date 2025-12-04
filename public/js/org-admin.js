@@ -129,5 +129,8 @@ async function loadTeams(orgId) {
 
 // Initialization function called from app.js
 export function initOrgAdmin() {
-  loadMyOrgs();
+  const orgTabLink = document.querySelector('#org-admin-nav a');
+  if (orgTabLink) {
+    orgTabLink.addEventListener('shown.bs.tab', loadMyOrgs);
+  }
 }
