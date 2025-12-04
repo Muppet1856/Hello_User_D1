@@ -115,6 +115,7 @@ api.use('*', async (c, next) => {
 // GET /api/me
 api.get('/me', async (c) => {
   const user = c.get('user');
+  console.log('GET /me: user data', user);  // Debug: Log user data returned
   return c.json(user);
 });
 
@@ -126,6 +127,7 @@ api.get('/organizations', async (c) => {
   }
 
   const { results } = await c.env.DB.prepare('SELECT id, name FROM organizations').all();
+  console.log('GET /organizations: results', results);  // Debug: Log fetched orgs
   return c.json(results);
 });
 
@@ -136,12 +138,20 @@ api.post('/organizations', async (c) => {
     return c.json({ error: 'Forbidden' }, 403);
   }
 
-  const user = c.get('user');  // Get the current user
+  const user = c.get('user');
+  console.log('POST /organizations: user.id', user.id);  // Debug: Log user ID for created_by
+
   const body = await c.req.json();
   const { name } = z.object({ name: z.string().min(1) }).parse(body);
 
   const orgId = crypto.randomUUID();
-  await c.env.DB.prepare('INSERT INTO organizations (id, name, created_by) VALUES (?, ?, ?)').bind(orgId, name, user.id).run();
+  try {
+    await c.env.DB.prepare('INSERT INTO organizations (id, name, created_by) VALUES (?, ?, ?)').bind(orgId, name, user.id).run();
+    console.log('POST /organizations: inserted org', { id: orgId, name, created_by: user.id });  // Debug: Log successful insert
+  } catch (e) {
+    console.error('POST /organizations: DB error', e);  // Debug: Log any DB errors
+    return c.json({ error: 'Database error' }, 500);
+  }
 
   return c.json({ id: orgId, name }, 201);
 });
@@ -184,10 +194,11 @@ api.post('/organizations/:orgId/invite-admin', async (c) => {
 // GET /api/my-orgs - List organizations where user is org_admin (or all if main_admin)
 api.get('/my-orgs', async (c) => {
   const userRoles = c.get('userRoles');
-  console.log('my-orgs: userRoles', userRoles);  // Debug log
+  console.log('GET /my-orgs: userRoles', userRoles);  // Debug: Log roles
+
   if (isMainAdmin(userRoles)) {
     const { results } = await c.env.DB.prepare('SELECT id, name FROM organizations').all();
-    console.log('my-orgs: all orgs for main admin', results);  // Debug log
+    console.log('GET /my-orgs: all orgs for main admin', results);  // Debug: Log results for main admin
     return c.json(results);
   }
   const orgIds = userRoles.filter(r => r.role === 'org_admin').map(r => r.org_id);
@@ -195,17 +206,18 @@ api.get('/my-orgs', async (c) => {
 
   const placeholders = orgIds.map(() => '?').join(',');
   const { results } = await c.env.DB.prepare(`SELECT id, name FROM organizations WHERE id IN (${placeholders})`).bind(...orgIds).all();
-  console.log('my-orgs: orgs for org admin', results);  // Debug log
+  console.log('GET /my-orgs: orgs for org admin', results);  // Debug: Log results for org admin
   return c.json(results);
 });
 
 // GET /api/my-teams - List teams where user is team_admin (or all if main_admin)
 api.get('/my-teams', async (c) => {
   const userRoles = c.get('userRoles');
-  console.log('my-teams: userRoles', userRoles);  // Debug log
+  console.log('GET /my-teams: userRoles', userRoles);  // Debug: Log roles
+
   if (isMainAdmin(userRoles)) {
     const { results } = await c.env.DB.prepare('SELECT t.id, t.name, t.org_id, o.name AS org_name FROM teams t JOIN organizations o ON t.org_id = o.id').all();
-    console.log('my-teams: all teams for main admin', results);  // Debug log
+    console.log('GET /my-teams: all teams for main admin', results);  // Debug: Log results for main admin
     return c.json(results);
   }
   const teamIds = userRoles.filter(r => r.role === 'team_admin').map(r => r.team_id);
@@ -213,7 +225,7 @@ api.get('/my-teams', async (c) => {
 
   const placeholders = teamIds.map(() => '?').join(',');
   const { results } = await c.env.DB.prepare(`SELECT t.id, t.name, t.org_id, o.name AS org_name FROM teams t JOIN organizations o ON t.org_id = o.id WHERE t.id IN (${placeholders})`).bind(...teamIds).all();
-  console.log('my-teams: teams for team admin', results);  // Debug log
+  console.log('GET /my-teams: teams for team admin', results);  // Debug: Log results for team admin
   return c.json(results);
 });
 
@@ -226,6 +238,7 @@ api.get('/organizations/:orgId/teams', async (c) => {
   }
 
   const { results } = await c.env.DB.prepare('SELECT id, name FROM teams WHERE org_id = ?').bind(orgId).all();
+  console.log('GET /organizations/:orgId/teams: results for orgId', orgId, results);  // Debug: Log fetched teams
   return c.json(results);
 });
 
@@ -238,11 +251,19 @@ api.post('/organizations/:orgId/teams', async (c) => {
   }
 
   const user = c.get('user');
+  console.log('POST /organizations/:orgId/teams: user.id', user.id);  // Debug: Log user ID for created_by
+
   const body = await c.req.json();
   const { name } = z.object({ name: z.string().min(1) }).parse(body);
 
   const teamId = crypto.randomUUID();
-  await c.env.DB.prepare('INSERT INTO teams (id, name, org_id, created_by) VALUES (?, ?, ?, ?)').bind(teamId, name, orgId, user.id).run();
+  try {
+    await c.env.DB.prepare('INSERT INTO teams (id, name, org_id, created_by) VALUES (?, ?, ?, ?)').bind(teamId, name, orgId, user.id).run();
+    console.log('POST /organizations/:orgId/teams: inserted team', { id: teamId, name, org_id: orgId, created_by: user.id });  // Debug: Log successful insert
+  } catch (e) {
+    console.error('POST /organizations/:orgId/teams: DB error', e);  // Debug: Log any DB errors
+    return c.json({ error: 'Database error' }, 500);
+  }
 
   return c.json({ id: teamId, name }, 201);
 });
@@ -280,17 +301,6 @@ api.post('/teams/:teamId/invite-admin', async (c) => {
   });
 
   return c.json({ success: true });
-});
-
-// GET /api/my-teams - List teams where user is team_admin
-api.get('/my-teams', async (c) => {
-  const userRoles = c.get('userRoles');
-  const teamIds = userRoles.filter(r => r.role === 'team_admin').map(r => r.team_id);
-  if (!teamIds.length) return c.json([]);
-
-  const placeholders = teamIds.map(() => '?').join(',');
-  const { results } = await c.env.DB.prepare(`SELECT t.id, t.name, t.org_id, o.name AS org_name FROM teams t JOIN organizations o ON t.org_id = o.id WHERE t.id IN (${placeholders})`).bind(...teamIds).all();
-  return c.json(results);
 });
 
 // POST /api/teams/:teamId/invite - Invite user to a specific role in team (team_admin only; roles: statistician, member, guest)
