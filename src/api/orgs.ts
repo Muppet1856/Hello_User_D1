@@ -1,0 +1,91 @@
+import { Hono } from 'hono';
+import { z } from 'zod';
+import jwt from '@tsndr/cloudflare-worker-jwt';
+import { Resend } from 'resend';
+import { isMainAdmin, isOrgAdminForOrg } from './helpers';
+
+type Bindings = {
+  DB: D1Database;
+  JWT_SECRET: string;
+  RESEND_API_KEY: string;
+  ASSETS: Fetcher;
+};
+
+const orgs = new Hono<{ Bindings: Bindings }>();
+
+orgs.get('/organizations', async (c) => {
+  const userRoles = c.get('userRoles');
+  if (!isMainAdmin(userRoles)) {
+    return c.json({ error: 'Forbidden' }, 403);
+  }
+
+  const { results } = await c.env.DB.prepare('SELECT id, name FROM organizations').all();
+  return c.json(results);
+});
+
+orgs.post('/organizations', async (c) => {
+  const userRoles = c.get('userRoles');
+  if (!isMainAdmin(userRoles)) {
+    return c.json({ error: 'Forbidden' }, 403);
+  }
+
+  const user = c.get('user');  // Get the current user
+  const body = await c.req.json();
+  const { name } = z.object({ name: z.string().min(1) }).parse(body);
+
+  const orgId = crypto.randomUUID();
+  await c.env.DB.prepare('INSERT INTO organizations (id, name, created_by) VALUES (?, ?, ?)').bind(orgId, name, user.id).run();
+
+  return c.json({ id: orgId, name }, 201);
+});
+
+orgs.post('/organizations/:orgId/invite-admin', async (c) => {
+  const userRoles = c.get('userRoles');
+  if (!isMainAdmin(userRoles)) {
+    return c.json({ error: 'Forbidden' }, 403);
+  }
+
+  const orgId = c.req.param('orgId');
+  // Verify org exists
+  const org = await c.env.DB.prepare('SELECT id FROM organizations WHERE id = ?').bind(orgId).first();
+  if (!org) {
+    return c.json({ error: 'Organization not found' }, 404);
+  }
+
+  const body = await c.req.json();
+  const { email } = z.object({ email: z.string().email() }).parse(body);
+
+  const createdBy = c.get('user').id;  // Inviter ID
+  const token = await jwt.sign(
+    { email, type: 'invite', role: 'org_admin', org_id: orgId, created_by: createdBy, exp: Math.floor(Date.now() / 1000) + 3600 * 24 }, // 24-hour expiry
+    c.env.JWT_SECRET
+  );
+
+  const inviteUrl = `https://grok-hello-user.zellen.workers.dev/?token=${token}`;
+
+  const resend = new Resend(c.env.RESEND_API_KEY);
+  await resend.emails.send({
+    from: 'registration@volleyballscore.app',
+    to: email,
+    subject: 'Invitation to Admin Organization',
+    html: `<p>You've been invited to admin the organization. Click <a href="${inviteUrl}">here</a> to accept (expires in 24 hours).</p>`,
+  });
+
+  return c.json({ success: true });
+});
+
+orgs.get('/my-orgs', async (c) => {
+  const userRoles = c.get('userRoles');
+  if (isMainAdmin(userRoles)) {
+    const { results } = await c.env.DB.prepare('SELECT id, name FROM organizations').all();
+    return c.json(results);
+  }
+  const orgIds = userRoles.filter(r => r.role === 'org_admin').map(r => r.org_id);
+  if (!orgIds.length) return c.json([]);
+
+  const placeholders = orgIds.map(() => '?').join(',');
+  const { results } = await c.env.DB.prepare(`SELECT id, name FROM organizations WHERE id IN (${placeholders})`).bind(...orgIds).all();
+  return c.json(results);
+});
+
+export default orgs;
