@@ -474,4 +474,4 @@ jobs:
           chmod +x pushover.sh
           
           # Example usage: Send a message when the workflow is done
-          ./pushover.sh "Deploy action action $OUTCOME" --title="$REPO_NAME:$BRANCH_NAME" --priority=0 --image="http://<https://github.githubassets.com/assets/GitHub-Mark-ea2971cee799.png"
+          ./pushover.sh "Deploy action $OUTCOME" --title="$REPO_NAME:$BRANCH_NAME" --priority=0 --image="http://<https://github.githubassets.com/assets/GitHub-Mark-ea2971cee799.png"

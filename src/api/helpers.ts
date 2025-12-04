@@ -28,8 +28,13 @@ export function isTeamAdminForTeam(roles: any[], teamId: string) {
   return isMainAdmin(roles) || roles.some(r => r.role === 'team_admin' && r.team_id === teamId);
 }
 
-// Optional: If you want to move auth middleware here
 export async function authMiddleware(c: Context<{ Bindings: Bindings }>, next: () => Promise<void>) {
+  const path = c.req.path;
+  // Skip auth for public routes (login and verify are magic-link entry points)
+  if (path === '/login' || path === '/verify') {
+    return await next();
+  }
+
   const auth = c.req.header('Authorization');
   if (!auth?.startsWith('Bearer ')) return c.json({ error: 'Unauthorized' }, 401);
   const token = auth.slice(7);
