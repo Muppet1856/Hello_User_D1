@@ -136,11 +136,12 @@ api.post('/organizations', async (c) => {
     return c.json({ error: 'Forbidden' }, 403);
   }
 
+  const user = c.get('user');  // Get the current user
   const body = await c.req.json();
   const { name } = z.object({ name: z.string().min(1) }).parse(body);
 
   const orgId = crypto.randomUUID();
-  await c.env.DB.prepare('INSERT INTO organizations (id, name) VALUES (?, ?)').bind(orgId, name).run();
+  await c.env.DB.prepare('INSERT INTO organizations (id, name, created_by) VALUES (?, ?, ?)').bind(orgId, name, user.id).run();
 
   return c.json({ id: orgId, name }, 201);
 });
