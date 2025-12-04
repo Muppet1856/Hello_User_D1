@@ -181,6 +181,82 @@ api.post('/organizations/:orgId/invite-admin', async (c) => {
   return c.json({ success: true });
 });
 
+// GET /api/my-orgs - List organizations where user is org_admin
+api.get('/my-orgs', async (c) => {
+  const userRoles = c.get('userRoles');
+  const orgIds = userRoles.filter(r => r.role === 'org_admin').map(r => r.org_id);
+  if (!orgIds.length) return c.json([]);
+
+  const placeholders = orgIds.map(() => '?').join(',');
+  const { results } = await c.env.DB.prepare(`SELECT id, name FROM organizations WHERE id IN (${placeholders})`).bind(...orgIds).all();
+  return c.json(results);
+});
+
+// GET /api/organizations/:orgId/teams - List teams in an organization (org_admin only)
+api.get('/organizations/:orgId/teams', async (c) => {
+  const orgId = c.req.param('orgId');
+  const userRoles = c.get('userRoles');
+  if (!isOrgAdminForOrg(userRoles, orgId)) {
+    return c.json({ error: 'Forbidden' }, 403);
+  }
+
+  const { results } = await c.env.DB.prepare('SELECT id, name FROM teams WHERE org_id = ?').bind(orgId).all();
+  return c.json(results);
+});
+
+// POST /api/organizations/:orgId/teams - Create a new team in organization (org_admin only)
+api.post('/organizations/:orgId/teams', async (c) => {
+  const orgId = c.req.param('orgId');
+  const userRoles = c.get('userRoles');
+  if (!isOrgAdminForOrg(userRoles, orgId)) {
+    return c.json({ error: 'Forbidden' }, 403);
+  }
+
+  const user = c.get('user');
+  const body = await c.req.json();
+  const { name } = z.object({ name: z.string().min(1) }).parse(body);
+
+  const teamId = crypto.randomUUID();
+  await c.env.DB.prepare('INSERT INTO teams (id, name, org_id, created_by) VALUES (?, ?, ?, ?)').bind(teamId, name, orgId, user.id).run();
+
+  return c.json({ id: teamId, name }, 201);
+});
+
+// POST /api/teams/:teamId/invite-admin - Invite user as team_admin (org_admin for the team's org only)
+api.post('/teams/:teamId/invite-admin', async (c) => {
+  const teamId = c.req.param('teamId');
+  const userRoles = c.get('userRoles');
+
+  const team = await c.env.DB.prepare('SELECT org_id, name FROM teams WHERE id = ?').bind(teamId).first();
+  if (!team) {
+    return c.json({ error: 'Team not found' }, 404);
+  }
+
+  if (!isOrgAdminForOrg(userRoles, team.org_id)) {
+    return c.json({ error: 'Forbidden' }, 403);
+  }
+
+  const body = await c.req.json();
+  const { email } = z.object({ email: z.string().email() }).parse(body);
+
+  const token = await jwt.sign(
+    { email, type: 'invite', role: 'team_admin', org_id: team.org_id, team_id: teamId, exp: Math.floor(Date.now() / 1000) + 3600 * 24 }, // 24-hour expiry
+    c.env.JWT_SECRET
+  );
+
+  const inviteUrl = `https://grok-hello-user.zellen.workers.dev/?token=${token}`;
+
+  const resend = new Resend(c.env.RESEND_API_KEY);
+  await resend.emails.send({
+    from: 'registration@volleyballscore.app',
+    to: email,
+    subject: `Invitation to Admin Team: ${team.name}`,
+    html: `<p>You've been invited to admin the team ${team.name}. Click <a href="${inviteUrl}">here</a> to accept (expires in 24 hours).</p>`,
+  });
+
+  return c.json({ success: true });
+});
+
 // More routes (GET/POST orgs, invite, teams, roles) go here - see previous messages for full implementations
 
 // Mount API
