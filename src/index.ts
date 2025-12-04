@@ -47,11 +47,11 @@ api.post('/login', async (c) => {
     c.env.JWT_SECRET
   );
 
-  const loginUrl = `https://hello-user.zellen.workers.dev/?token=${token}`;
+  const loginUrl = `https://grok-hello-user.zellen.workers.dev/?token=${token}`;
 
   const resend = new Resend(c.env.RESEND_API_KEY);
   await resend.emails.send({
-    from: 'no-reply@zellenfamily.com',
+    from: 'no-reply@volleyballscore.app',
     to: email,
     subject: 'Hello User Login Link',
     html: `<p>Click <a href="${loginUrl}">here</a> to log in (expires in 1 hour).</p>`,
