@@ -5,8 +5,8 @@ CREATE TABLE IF NOT EXISTS users (
   verified BOOLEAN DEFAULT FALSE,
   joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   invited_by TEXT NOT NULL,  -- References users.id (inviter; self for default or self-signup)
-  FOREIGN KEY (invited_by) REFERENCES users(id),
-  passkey TEXT  -- For future passkey support
+  passkey TEXT,  -- For future passkey support
+  FOREIGN KEY (invited_by) REFERENCES users(id)
 );
 
 CREATE TABLE IF NOT EXISTS organizations (
