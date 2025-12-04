@@ -311,10 +311,13 @@ jobs:
       # Add Secrets
       # ————————————————————————
       - name: Add secrets programmatically
+        if: steps.cfg.outputs.type != 'skip'
         run: |
-          # Pipe secrets to wrangler put (overwrites if exists)
-          echo "${{ secrets.JWT_SECRET }}" | npx wrangler secret put JWT_SECRET --name hello-user
-          echo "${{ secrets.RESEND_API_KEY }}" | npx wrangler secret put RESEND_API_KEY --name hello-user
+          FINAL_NAME="${{ env.FINAL_NAME }}"
+          echo "Putting secrets into Worker: $FINAL_NAME"
+
+          echo "${{ secrets.JWT_SECRET }}" | npx wrangler secret put JWT_SECRET --name "$FINAL_NAME"
+          echo "${{ secrets.RESEND_API_KEY }}" | npx wrangler secret put RESEND_API_KEY --name "$FINAL_NAME"
 
       # ————————————————————————
       # Deploy Worker
