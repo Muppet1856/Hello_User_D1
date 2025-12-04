@@ -307,6 +307,36 @@ api.post('/teams/:teamId/invite', async (c) => {
   return c.json({ success: true });
 });
 
+// GET /api/my-orgs - List organizations where user is org_admin (or all if main_admin)
+api.get('/my-orgs', async (c) => {
+  const userRoles = c.get('userRoles');
+  if (isMainAdmin(userRoles)) {
+    const { results } = await c.env.DB.prepare('SELECT id, name FROM organizations').all();
+    return c.json(results);
+  }
+  const orgIds = userRoles.filter(r => r.role === 'org_admin').map(r => r.org_id);
+  if (!orgIds.length) return c.json([]);
+
+  const placeholders = orgIds.map(() => '?').join(',');
+  const { results } = await c.env.DB.prepare(`SELECT id, name FROM organizations WHERE id IN (${placeholders})`).bind(...orgIds).all();
+  return c.json(results);
+});
+
+// GET /api/my-teams - List teams where user is team_admin (or all if main_admin)
+api.get('/my-teams', async (c) => {
+  const userRoles = c.get('userRoles');
+  if (isMainAdmin(userRoles)) {
+    const { results } = await c.env.DB.prepare('SELECT t.id, t.name, t.org_id, o.name AS org_name FROM teams t JOIN organizations o ON t.org_id = o.id').all();
+    return c.json(results);
+  }
+  const teamIds = userRoles.filter(r => r.role === 'team_admin').map(r => r.team_id);
+  if (!teamIds.length) return c.json([]);
+
+  const placeholders = teamIds.map(() => '?').join(',');
+  const { results } = await c.env.DB.prepare(`SELECT t.id, t.name, t.org_id, o.name AS org_name FROM teams t JOIN organizations o ON t.org_id = o.id WHERE t.id IN (${placeholders})`).bind(...teamIds).all();
+  return c.json(results);
+});
+
 // More routes (GET/POST orgs, invite, teams, roles) go here - see previous messages for full implementations
 
 // Mount API

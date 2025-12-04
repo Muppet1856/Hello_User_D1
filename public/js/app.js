@@ -69,21 +69,22 @@ async function loadDashboard() {
   document.getElementById('dashboard').style.display = 'block';
 
   const roles = user.roles || [];
+  const isMain = roles.some(r => r.role === 'main_admin');
 
-  if (roles.some(r => r.role === 'main_admin')) {
+  if (isMain) {
     document.getElementById('main-admin-nav').style.display = 'list-item';
-    const { initMainAdmin } = await import('./main-admin.js');  // Dynamic import
+    const { initMainAdmin } = await import('./main-admin.js');
     initMainAdmin();
   }
-  if (roles.some(r => r.role === 'org_admin')) {
+  if (roles.some(r => r.role === 'org_admin') || isMain) {
     document.getElementById('org-admin-nav').style.display = 'list-item';
     const { initOrgAdmin } = await import('./org-admin.js');
-  initOrgAdmin();
+    initOrgAdmin();
   }
-  if (roles.some(r => r.role === 'team_admin')) {
+  if (roles.some(r => r.role === 'team_admin') || isMain) {
     document.getElementById('team-admin-nav').style.display = 'list-item';
     const { initTeamAdmin } = await import('./team-admin.js');
-  initTeamAdmin();
+    initTeamAdmin();
   }
 
   // Activate the first visible tab
