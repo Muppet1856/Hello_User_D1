@@ -76,13 +76,14 @@ async function loadDashboard() {
     initMainAdmin();
   }
   if (roles.some(r => r.role === 'org_admin')) {
-  document.getElementById('org-admin-nav').style.display = 'list-item';
-  const { initOrgAdmin } = await import('./org-admin.js');
+    document.getElementById('org-admin-nav').style.display = 'list-item';
+    const { initOrgAdmin } = await import('./org-admin.js');
   initOrgAdmin();
   }
   if (roles.some(r => r.role === 'team_admin')) {
     document.getElementById('team-admin-nav').style.display = 'list-item';
-    // TODO: Dynamic import for team-admin.js if added
+    const { initTeamAdmin } = await import('./team-admin.js');
+  initTeamAdmin();
   }
 
   // Activate the first visible tab

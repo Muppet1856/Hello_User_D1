@@ -257,6 +257,56 @@ api.post('/teams/:teamId/invite-admin', async (c) => {
   return c.json({ success: true });
 });
 
+// GET /api/my-teams - List teams where user is team_admin
+api.get('/my-teams', async (c) => {
+  const userRoles = c.get('userRoles');
+  const teamIds = userRoles.filter(r => r.role === 'team_admin').map(r => r.team_id);
+  if (!teamIds.length) return c.json([]);
+
+  const placeholders = teamIds.map(() => '?').join(',');
+  const { results } = await c.env.DB.prepare(`SELECT t.id, t.name, t.org_id, o.name AS org_name FROM teams t JOIN organizations o ON t.org_id = o.id WHERE t.id IN (${placeholders})`).bind(...teamIds).all();
+  return c.json(results);
+});
+
+// POST /api/teams/:teamId/invite - Invite user to a specific role in team (team_admin only; roles: statistician, member, guest)
+api.post('/teams/:teamId/invite', async (c) => {
+  const teamId = c.req.param('teamId');
+  const userRoles = c.get('userRoles');
+
+  const team = await c.env.DB.prepare('SELECT org_id, name FROM teams WHERE id = ?').bind(teamId).first();
+  if (!team) {
+    return c.json({ error: 'Team not found' }, 404);
+  }
+
+  if (!isTeamAdminForTeam(userRoles, teamId)) {
+    return c.json({ error: 'Forbidden' }, 403);
+  }
+
+  const body = await c.req.json();
+  const schema = z.object({
+    email: z.string().email(),
+    role: z.enum(['statistician', 'member', 'guest'])
+  });
+  const { email, role } = schema.parse(body);
+
+  const token = await jwt.sign(
+    { email, type: 'invite', role, org_id: team.org_id, team_id: teamId, exp: Math.floor(Date.now() / 1000) + 3600 * 24 }, // 24-hour expiry
+    c.env.JWT_SECRET
+  );
+
+  const inviteUrl = `https://grok-hello-user.zellen.workers.dev/?token=${token}`;
+
+  const resend = new Resend(c.env.RESEND_API_KEY);
+  await resend.emails.send({
+    from: 'registration@volleyballscore.app',
+    to: email,
+    subject: `Invitation to Join Team: ${team.name} as ${role.charAt(0).toUpperCase() + role.slice(1)}`,
+    html: `<p>You've been invited to join the team ${team.name} as a ${role}. Click <a href="${inviteUrl}">here</a> to accept (expires in 24 hours).</p>`,
+  });
+
+  return c.json({ success: true });
+});
+
 // More routes (GET/POST orgs, invite, teams, roles) go here - see previous messages for full implementations
 
 // Mount API
