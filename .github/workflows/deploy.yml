@@ -52,6 +52,9 @@ jobs:
           ref: ${{ github.ref }}
           persist-credentials: true
 
+      # ————————————————————————
+      # Verify src/index
+      # ————————————————————————
       - name: Verify src/index.ts
         run: |
           [ -f "src/index.ts" ] || (echo "Error: src/index.ts missing" >&2; exit 1)
@@ -64,10 +67,7 @@ jobs:
           npm install wrangler@4
           sudo apt update -qq && sudo apt install -y jq -qq
 
-      # ————————————————————————
-      # Determine Deploy Type & Badge Label
-      # ————————————————————————
-      - name: Determine Deploy Type & Badge Label
+      - name: Determine Deploy Type
         id: cfg
         run: |
           sanitize() {
@@ -82,30 +82,39 @@ jobs:
           BRANCH_REF="${{ github.ref }}"
           BRANCH_NAME=$(echo "$BRANCH_REF" | sed 's|^refs/heads/||' | sed 's|^refs/pull/[0-9]*/merge$||')
           EVENT="${{ github.event_name }}"
-          BADGE_OVERRIDE="${{ inputs.badge_label }}"
 
-          if [ "$EVENT" = "push" ] && [ "$BRANCH_NAME" = "main" ]; then
-            echo "type=prod" >> $GITHUB_OUTPUT
-            echo "env_name=" >> $GITHUB_OUTPUT
-            echo "badge_label=production" >> $GITHUB_OUTPUT
+          if [ "$EVENT" = "push" ]; then
+            if [ "$BRANCH_NAME" = "main" ]; then
+              echo "type=prod" >> $GITHUB_OUTPUT
+              echo "env_name=" >> $GITHUB_OUTPUT
+            else
+              ENV=$(sanitize "$BRANCH_NAME")
+              # Check if this branch has an open PR (to avoid duplicate runs with pull_request trigger)
+              API_URL="https://api.github.com/repos/${{ github.repository }}/pulls?head=${{ github.repository_owner }}:${BRANCH_NAME}&state=open"
+              PR_COUNT=$(curl -s -H "Authorization: token ${{ github.token }}" -H "Accept: application/vnd.github.v3+json" "$API_URL" | jq 'length')
+              if [ "$PR_COUNT" -gt 0 ]; then
+                echo "type=skip" >> $GITHUB_OUTPUT
+                echo "Skipping push deployment for branch $BRANCH_NAME (open PR exists; handled by pull_request trigger)"
+              else
+                echo "type=branch" >> $GITHUB_OUTPUT
+                echo "env_name=$ENV" >> $GITHUB_OUTPUT
+              fi
+            fi
 
           elif [ "$EVENT" = "pull_request" ]; then
             PR_NUM="${{ github.event.pull_request.number }}"
             ENV=$(sanitize "pr-${PR_NUM}")
             echo "type=pr" >> $GITHUB_OUTPUT
             echo "env_name=$ENV" >> $GITHUB_OUTPUT
-            echo "badge_label=${BADGE_OVERRIDE:-$ENV}" >> $GITHUB_OUTPUT
 
           elif [ "$EVENT" = "workflow_dispatch" ]; then
             if [ "$BRANCH_NAME" = "main" ]; then
               echo "type=prod" >> $GITHUB_OUTPUT
               echo "env_name=" >> $GITHUB_OUTPUT
-              echo "badge_label=production" >> $GITHUB_OUTPUT
             else
               ENV=$(sanitize "$BRANCH_NAME")
               echo "type=manual" >> $GITHUB_OUTPUT
               echo "env_name=$ENV" >> $GITHUB_OUTPUT
-              echo "badge_label=${BADGE_OVERRIDE:-$ENV}" >> $GITHUB_OUTPUT
             fi
 
           else
