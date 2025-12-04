@@ -130,4 +130,4 @@ async function loadTeams(orgId) {
 // Initialization function called from app.js
 export function initOrgAdmin() {
   loadMyOrgs();
-} 
+}
