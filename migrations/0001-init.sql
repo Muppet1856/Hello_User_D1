@@ -18,7 +18,9 @@ CREATE TABLE IF NOT EXISTS teams (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   org_id TEXT NOT NULL,
-  FOREIGN KEY (org_id) REFERENCES organizations(id)
+  created_by TEXT NOT NULL,  -- References users.id (Main Admin)
+  FOREIGN KEY (org_id) REFERENCES organizations(id),
+  FOREIGN KEY (created_by) REFERENCES users(id)
 );
 
 CREATE TABLE IF NOT EXISTS user_roles (
