@@ -362,6 +362,8 @@ jobs:
         env:
           PO_USER_TOKEN: ${{ secrets.PO_USER_TOKEN }}
           PO_TOKEN: ${{ secrets.PO_TOKEN }}
+          REPO_NAME: ${{ github.repository }}
+          BRANCH_NAME: ${{ github.ref_name }}
         run: |
           cat << 'EOF' > pushover.sh
           #!/bin/bash
@@ -471,4 +473,4 @@ jobs:
           chmod +x pushover.sh
           
           # Example usage: Send a message when the workflow is done
-          ./pushover.sh "Workflow completed" --title="GitHub CI Notification" --priority=0
+          ./pushover.sh "Deploy action completed" --title="$REPO_NAME:$BRANCH_NAME" --priority=0 --image="http://<https://github.githubassets.com/assets/GitHub-Mark-ea2971cee799.png"
