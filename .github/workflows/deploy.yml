@@ -354,3 +354,121 @@ jobs:
               body: `Preview: ${{ env.PREVIEW_URL }}`
             });
 
+      # ————————————————————————
+      # Pushover Notce
+      # ————————————————————————
+      - name: Send Pushover Notification
+        if: always()  # Ensures this runs even if previous steps fail
+        env:
+          PO_USER_TOKEN: ${{ secrets.PO_USER_TOKEN }}
+          PO_TOKEN: ${{ secrets.PO_TOKEN }}
+        run: |
+          cat << 'EOF' > pushover.sh
+          #!/bin/bash
+
+          # Script: pushover
+          VERSION="1.0.0"
+          # Description: Sends a formatted message via Pushover with optional title, sound, priority, and image.
+
+          USER_TOKEN="$PO_USER_TOKEN"
+          TOKEN="$PO_TOKEN"
+
+          if [[ "$1" == "--version" ]]; then
+            echo "pushover version $VERSION"
+            exit 0
+          fi
+
+          if [[ "$1" == "--help" ]]; then
+            cat <<EOD
+          Usage:
+            $0 "<message>" [options]
+
+          Required:
+            "<message>"            The message body to send (quoted)
+
+          Optional:
+            --title=TITLE          Notification title (defaults to hostname)
+            --image=FILE           Attach an image file
+            --sound=SOUND          Notification sound
+            --priority=LEVEL       Priority level: -1 (quiet), 0 (normal), 1 (high)
+            --quiet                Suppress local command output
+          EOD
+            exit 0
+          fi
+
+          if [[ -z "$1" || "$1" == --* ]]; then
+            echo "Error: Message is required as the first argument."
+            exit 1
+          fi
+
+          message="$1"
+          title="$(hostname)"
+          sound=""
+          priority=""
+          image_path=""
+          quiet=0
+
+          for arg in "${@:2}"; do
+            case $arg in
+              --title=*)
+                title="${arg#--title=}"
+                title=$(echo -n "$title" | head -c 1024)
+                ;;
+              --image=*)
+                image_path="${arg#--image=}"
+                ;;
+              --sound=*)
+                sound="${arg#--sound=}"
+                ;;
+              --priority=*)
+                priority="${arg#--priority=}"
+                ;;
+              --quiet)
+                quiet=1
+                ;;
+              *)
+                echo "Error: Unrecognized option '$arg'"
+                exit 1
+                ;;
+            esac
+          done
+
+          message=$(echo -n "$message" | head -c 1024)
+
+          curl_args=(
+            --form-string "token=$TOKEN"
+            --form-string "user=$USER_TOKEN"
+            --form-string "message=$message"
+            --form-string "title=$title"
+            --form-string "html=1"
+          )
+
+          valid_sounds=(pushover bike bugle cashregister classical cosmic falling gamelan incoming intermission magic mechanical piano-bar siren spacealarm tugboat alien climb persistent echo updown none tada scott espn)
+          if [[ -n "$sound" ]]; then
+            if [[ ! " ${valid_sounds[*]} " =~ " $sound " ]]; then
+              echo "Invalid sound: '$sound'. Must be one of: ${valid_sounds[*]}" >&2
+              exit 1
+            fi
+            curl_args+=( --form-string "sound=$sound" )
+          fi
+
+          valid_priorities=(-1 0 1)
+          if [[ -n "$priority" ]]; then
+            if [[ ! " ${valid_priorities[*]} " =~ " $priority " ]]; then
+              echo "Invalid priority: '$priority'. Must be one of: ${valid_priorities[*]}" >&2
+              exit 1
+            fi
+            curl_args+=( --form-string "priority=$priority" )
+          fi
+
+          if [[ -n "$image_path" && -f "$image_path" ]]; then
+            curl_args+=( -F "attachment=@$image_path" )
+          fi
+
+          curl "${curl_args[@]}" https://api.pushover.net/1/messages.json &> /dev/null
+          EOF
+          
+          chmod +x pushover.sh
+          
+          # Example usage: Send a message when the workflow is done
+          ./pushover.sh "Workflow completed" --title="GitHub CI Notification" --priority=0
