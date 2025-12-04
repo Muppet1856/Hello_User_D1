@@ -35,6 +35,7 @@ jobs:
       - name: Validate Cloudflare credentials
         if: steps.cfg.outputs.type != 'skip'
         run: |
+          npm install wrangler@4 --save-dev
           set -euo pipefail
           echo "Validating Cloudflare API token..."
           npx wrangler whoami || {
@@ -60,7 +61,7 @@ jobs:
       # ————————————————————————
       - name: Install tools
         run: |
-          npm install wrangler@4 --save-dev
+          npm install wrangler@4
           sudo apt update -qq && sudo apt install -y jq -qq
 
       # ————————————————————————
