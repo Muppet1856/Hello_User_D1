@@ -28,11 +28,11 @@ function isMainAdmin(roles: any[]) {
 }
 
 function isOrgAdminForOrg(roles: any[], orgId: string) {
-  return roles.some(r => r.role === 'org_admin' && r.org_id === orgId);
+  return isMainAdmin(roles) || roles.some(r => r.role === 'org_admin' && r.org_id === orgId);
 }
 
 function isTeamAdminForTeam(roles: any[], teamId: string) {
-  return roles.some(r => r.role === 'team_admin' && r.team_id === teamId);
+  return isMainAdmin(roles) || roles.some(r => r.role === 'team_admin' && r.team_id === teamId);
 }
 
 // --- Routes ---
