@@ -51,7 +51,7 @@ api.post('/login', async (c) => {
 
   const resend = new Resend(c.env.RESEND_API_KEY);
   await resend.emails.send({
-    from: 'no-reply@volleyballscore.app',
+    from: 'registration@volleyballscore.app',
     to: email,
     subject: 'Hello User Login Link',
     html: `<p>Click <a href="${loginUrl}">here</a> to log in (expires in 1 hour).</p>`,
