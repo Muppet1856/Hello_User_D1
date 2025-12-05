@@ -13,6 +13,16 @@ type Bindings = {
 
 const orgs = new Hono<{ Bindings: Bindings }>();
 
+orgs.get('/my-orgs', async (c) => {
+  const userRoles = c.get('userRoles');
+  const orgIds = userRoles.filter(r => r.role === 'org_admin').map(r => r.org_id);
+  if (!orgIds.length) return c.json([]);
+
+  const placeholders = orgIds.map(() => '?').join(',');
+  const { results } = await c.env.DB.prepare(`SELECT id, name FROM organizations WHERE id IN (${placeholders})`).bind(...orgIds).all();
+  return c.json(results);
+});
+
 orgs.get('/organizations', async (c) => {
   const userRoles = c.get('userRoles');
   if (!isMainAdmin(userRoles)) {
@@ -29,7 +39,7 @@ orgs.post('/organizations', async (c) => {
     return c.json({ error: 'Forbidden' }, 403);
   }
 
-  const user = c.get('user');  // Get the current user
+  const user = c.get('user');
   const body = await c.req.json();
   const { name } = z.object({ name: z.string().min(1) }).parse(body);
 
@@ -40,14 +50,13 @@ orgs.post('/organizations', async (c) => {
 });
 
 orgs.post('/organizations/:orgId/invite-admin', async (c) => {
+  const orgId = c.req.param('orgId');
   const userRoles = c.get('userRoles');
   if (!isMainAdmin(userRoles)) {
     return c.json({ error: 'Forbidden' }, 403);
   }
 
-  const orgId = c.req.param('orgId');
-  // Verify org exists
-  const org = await c.env.DB.prepare('SELECT id FROM organizations WHERE id = ?').bind(orgId).first();
+  const org = await c.env.DB.prepare('SELECT name FROM organizations WHERE id = ?').bind(orgId).first();
   if (!org) {
     return c.json({ error: 'Organization not found' }, 404);
   }
@@ -72,21 +81,25 @@ orgs.post('/organizations/:orgId/invite-admin', async (c) => {
   await resend.emails.send({
     from: 'registration@volleyballscore.app',
     to: email,
-    subject: 'Invitation to Admin Organization',
-    html: `<p>You've been invited to admin the organization. Click <a href="${inviteUrl}">here</a> to accept (expires in 24 hours).</p>`,
+    subject: `Invitation to Admin Organization: ${org.name}`,
+    html: `
+
+You've been invited to admin the organization ${org.name}. Click [here](${inviteUrl}) to accept (expires in 24 hours).
+
+`,
   });
 
   return c.json({ success: true });
 });
 
-// Rename organization (PUT)
+// Rename org (PUT)
 orgs.put('/organizations/:orgId', async (c) => {
+  const orgId = c.req.param('orgId');
   const userRoles = c.get('userRoles');
-  if (!isMainAdmin(userRoles)) {
+  if (!isMainAdmin(userRoles) && !isOrgAdminForOrg(userRoles, orgId)) {
     return c.json({ error: 'Forbidden' }, 403);
   }
 
-  const orgId = c.req.param('orgId');
   const body = await c.req.json();
   const { name } = z.object({ name: z.string().min(1) }).parse(body);
 
@@ -98,34 +111,20 @@ orgs.put('/organizations/:orgId', async (c) => {
   return c.json({ success: true });
 });
 
-// Delete organization (DELETE)
+// Delete org (DELETE)
 orgs.delete('/organizations/:orgId', async (c) => {
+  const orgId = c.req.param('orgId');
   const userRoles = c.get('userRoles');
-  if (!isMainAdmin(userRoles)) {
+  if (!isMainAdmin(userRoles) && !isOrgAdminForOrg(userRoles, orgId)) {
     return c.json({ error: 'Forbidden' }, 403);
   }
 
-  const orgId = c.req.param('orgId');
   const result = await c.env.DB.prepare('DELETE FROM organizations WHERE id = ?').bind(orgId).run();
   if (result.meta.changes === 0) {
     return c.json({ error: 'Organization not found' }, 404);
   }
 
   return c.json({ success: true });
-});
-
-orgs.get('/my-orgs', async (c) => {
-  const userRoles = c.get('userRoles');
-  if (isMainAdmin(userRoles)) {
-    const { results } = await c.env.DB.prepare('SELECT id, name FROM organizations').all();
-    return c.json(results);
-  }
-  const orgIds = userRoles.filter(r => r.role === 'org_admin').map(r => r.org_id);
-  if (!orgIds.length) return c.json([]);
-
-  const placeholders = orgIds.map(() => '?').join(',');
-  const { results } = await c.env.DB.prepare(`SELECT id, name FROM organizations WHERE id IN (${placeholders})`).bind(...orgIds).all();
-  return c.json(results);
 });
 
 export default orgs;

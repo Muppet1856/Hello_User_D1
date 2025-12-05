@@ -12,8 +12,10 @@ orgAdminTab.innerHTML = `
 
 // Load my orgs and build UI
 async function loadMyOrgs() {
+  console.log('Loading orgs...');
   const res = await api('/my-orgs');
   if (!res.ok) {
+    console.error('Failed to load orgs:', res.status);
     alert('Failed to load your organizations');
     return;
   }
@@ -34,7 +36,15 @@ async function loadMyOrgs() {
     item.innerHTML = `
       <h2 class="accordion-header" id="${itemId}">
         <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#${collapseId}" aria-expanded="false" aria-controls="${collapseId}">
-          ${org.name} (ID: ${org.id})
+          <table class="w-100">
+            <tr>
+              <td>${org.name} (ID: ${org.id})</td>
+              <td class="text-end pe-5">
+                <button class="btn btn-warning btn-sm rename-btn me-1" data-org-id="${org.id}" data-org-name="${org.name}">Rename</button>
+                <button class="btn btn-danger btn-sm delete-btn" data-org-id="${org.id}">Delete</button>
+              </td>
+            </tr>
+          </table>
         </button>
       </h2>
       <div id="${collapseId}" class="accordion-collapse collapse" aria-labelledby="${itemId}" data-bs-parent="#orgAccordion">
@@ -50,6 +60,21 @@ async function loadMyOrgs() {
       </div>
     `;
     accordion.appendChild(item);
+
+    // Attach rename handler (opens modal)
+    item.querySelector('.rename-btn').addEventListener('click', (e) => {
+      e.stopPropagation(); // Prevent triggering collapse
+      const orgId = e.target.dataset.orgId;
+      const currentName = e.target.dataset.orgName;
+      showRenameModal(orgId, currentName);
+    });
+
+    // Attach delete handler (opens modal)
+    item.querySelector('.delete-btn').addEventListener('click', (e) => {
+      e.stopPropagation(); // Prevent triggering collapse
+      const orgId = e.target.dataset.orgId;
+      showDeleteModal(orgId);
+    });
 
     // Attach create team handler
     item.querySelector('.create-team-btn').addEventListener('click', async (e) => {
@@ -78,8 +103,10 @@ async function loadMyOrgs() {
 
 // Load teams for a specific org
 async function loadTeamsForOrg(orgId) {
+  console.log('Loading teams for org:', orgId);
   const res = await api(`/organizations/${orgId}/teams`);
   if (!res.ok) {
+    console.error('Failed to load teams:', res.status);
     alert('Failed to load teams');
     return;
   }
@@ -104,8 +131,8 @@ async function loadTeamsForOrg(orgId) {
             <tr>
               <td>${team.name} (ID: ${team.id})</td>
               <td class="text-end pe-5">
-                <button class="btn btn-warning btn-sm rename-btn me-1" data-team-id="${team.id}" data-team-name="${team.name}">Rename</button>
-                <button class="btn btn-danger btn-sm delete-btn" data-team-id="${team.id}">Delete</button>
+                <button class="btn btn-warning btn-sm rename-team-btn me-1" data-team-id="${team.id}" data-team-name="${team.name}">Rename</button>
+                <button class="btn btn-danger btn-sm delete-team-btn" data-team-id="${team.id}">Delete</button>
               </td>
             </tr>
           </table>
@@ -154,19 +181,19 @@ async function loadTeamsForOrg(orgId) {
     `;
     teamAccordion.appendChild(item);
 
-    // Attach rename handler (opens modal)
-    item.querySelector('.rename-btn').addEventListener('click', (e) => {
+    // Attach rename team handler (opens modal)
+    item.querySelector('.rename-team-btn').addEventListener('click', (e) => {
       e.stopPropagation(); // Prevent triggering collapse
       const teamId = e.target.dataset.teamId;
       const currentName = e.target.dataset.teamName;
-      showRenameModal(teamId, currentName, orgId);
+      showRenameTeamModal(teamId, currentName, orgId);
     });
 
-    // Attach delete handler (opens modal)
-    item.querySelector('.delete-btn').addEventListener('click', (e) => {
+    // Attach delete team handler (opens modal)
+    item.querySelector('.delete-team-btn').addEventListener('click', (e) => {
       e.stopPropagation(); // Prevent triggering collapse
       const teamId = e.target.dataset.teamId;
-      showDeleteModal(teamId, orgId);
+      showDeleteTeamModal(teamId, orgId);
     });
 
     // Attach invite handler
@@ -201,9 +228,110 @@ async function loadTeamsForOrg(orgId) {
   });
 }
 
-// Function to show rename modal
-function showRenameModal(teamId, currentName, orgId) {
-  const modalId = `renameModal-${teamId}`;
+// Function to show rename org modal
+function showRenameModal(orgId, currentName) {
+  const modalId = `renameModal-${orgId}`;
+  const modal = document.createElement('div');
+  modal.className = 'modal fade';
+  modal.id = modalId;
+  modal.innerHTML = `
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Rename Organization</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <form>
+            <div class="mb-3">
+              <label for="new-org-name-${orgId}" class="form-label">New Organization Name</label>
+              <input type="text" class="form-control" id="new-org-name-${orgId}" value="${currentName}">
+            </div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-primary confirm-rename-btn">OK</button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+
+  const bsModal = new bootstrap.Modal(modal);
+  bsModal.show();
+
+  // Attach confirm rename handler
+  modal.querySelector('.confirm-rename-btn').addEventListener('click', async () => {
+    const name = document.getElementById(`new-org-name-${orgId}`).value.trim();
+    if (!name) {
+      alert('Please enter a new name');
+      return;
+    }
+    const res = await api(`/organizations/${orgId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ name })
+    });
+    if (res.ok) {
+      alert('Organization renamed!');
+      loadMyOrgs(); // Refresh orgs
+    } else {
+      alert('Failed to rename organization.');
+    }
+    bsModal.hide();
+  });
+
+  // Clean up modal after hide
+  modal.addEventListener('hidden.bs.modal', () => modal.remove());
+}
+
+// Function to show delete org confirm modal
+function showDeleteModal(orgId) {
+  const modalId = `deleteModal-${orgId}`;
+  const modal = document.createElement('div');
+  modal.className = 'modal fade';
+  modal.id = modalId;
+  modal.innerHTML = `
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Confirm Delete</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p>Are you sure you want to delete this organization? This action cannot be undone.</p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">No</button>
+          <button type="button" class="btn btn-danger confirm-delete-btn">Yes</button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+
+  const bsModal = new bootstrap.Modal(modal);
+  bsModal.show();
+
+  // Attach confirm delete handler
+  modal.querySelector('.confirm-delete-btn').addEventListener('click', async () => {
+    const res = await api(`/organizations/${orgId}`, { method: 'DELETE' });
+    if (res.ok) {
+      alert('Organization deleted!');
+      loadMyOrgs(); // Refresh orgs
+    } else {
+      alert('Failed to delete organization.');
+    }
+    bsModal.hide();
+  });
+
+  // Clean up modal after hide
+  modal.addEventListener('hidden.bs.modal', () => modal.remove());
+}
+
+// Function to show rename team modal
+function showRenameTeamModal(teamId, currentName, orgId) {
+  const modalId = `renameTeamModal-${teamId}`;
   const modal = document.createElement('div');
   modal.className = 'modal fade';
   modal.id = modalId;
@@ -247,7 +375,7 @@ function showRenameModal(teamId, currentName, orgId) {
     });
     if (res.ok) {
       alert('Team renamed!');
-      loadTeamsForOrg(orgId); // Refresh
+      loadTeamsForOrg(orgId); // Refresh teams
     } else {
       alert('Failed to rename team.');
     }
@@ -258,9 +386,9 @@ function showRenameModal(teamId, currentName, orgId) {
   modal.addEventListener('hidden.bs.modal', () => modal.remove());
 }
 
-// Function to show delete confirm modal
-function showDeleteModal(teamId, orgId) {
-  const modalId = `deleteModal-${teamId}`;
+// Function to show delete team confirm modal
+function showDeleteTeamModal(teamId, orgId) {
+  const modalId = `deleteTeamModal-${teamId}`;
   const modal = document.createElement('div');
   modal.className = 'modal fade';
   modal.id = modalId;
@@ -291,7 +419,7 @@ function showDeleteModal(teamId, orgId) {
     const res = await api(`/teams/${teamId}`, { method: 'DELETE' });
     if (res.ok) {
       alert('Team deleted!');
-      loadTeamsForOrg(orgId); // Refresh
+      loadTeamsForOrg(orgId); // Refresh teams
     } else {
       alert('Failed to delete team.');
     }
@@ -302,7 +430,7 @@ function showDeleteModal(teamId, orgId) {
   modal.addEventListener('hidden.bs.modal', () => modal.remove());
 }
 
-// Load members for a specific team (same as before)
+// Load members for a specific team
 async function loadMembers(teamId) {
   const res = await api(`/teams/${teamId}/members`);
   if (!res.ok) {
