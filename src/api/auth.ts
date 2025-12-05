@@ -37,13 +37,21 @@ auth.post('/login', async (c) => {
 
 auth.get('/verify', async (c) => {
   const token = c.req.query('token');
-  if (!token) return c.json({ error: 'Missing token' }, 400);
+  if (!token) {
+    console.log('[VERIFY] Missing token');
+    return c.json({ error: 'Missing token' }, 400);
+  }
 
   let payload;
   try {
-    if (!await jwt.verify(token, c.env.JWT_SECRET)) throw new Error();
+    if (!await jwt.verify(token, c.env.JWT_SECRET)) {
+      console.log('[VERIFY] Token verification failed');
+      throw new Error();
+    }
     payload = jwt.decode(token).payload;
-  } catch {
+    console.log('[VERIFY] Token decoded successfully');
+  } catch (err) {
+    console.error(`[VERIFY ERROR] Invalid/expired token: ${err.message}`);
     return c.json({ error: 'Invalid/expired token' }, 401);
   }
 

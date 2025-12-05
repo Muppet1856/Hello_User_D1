@@ -30,23 +30,33 @@ export function isTeamAdminForTeam(roles: any[], teamId: string) {
 
 export async function authMiddleware(c: Context<{ Bindings: Bindings }>, next: () => Promise<void>) {
   const path = c.req.path;
-  // Skip auth for public routes (login and verify are magic-link entry points)
   if (path === '/login' || path === '/verify') {
     return await next();
   }
 
   const auth = c.req.header('Authorization');
-  if (!auth?.startsWith('Bearer ')) return c.json({ error: 'Unauthorized' }, 401);
+  if (!auth?.startsWith('Bearer ')) {
+    console.log('[AUTH] Missing Bearer token');
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
   const token = auth.slice(7);
   try {
-    if (!await jwt.verify(token, c.env.JWT_SECRET)) throw new Error();
+    if (!await jwt.verify(token, c.env.JWT_SECRET)) {
+      console.log('[AUTH] Token verification failed');
+      throw new Error();
+    }
     const payload = jwt.decode(token).payload as { id: string };
     const user = await getUserWithRoles(c.env.DB, payload.id);
-    if (!user) throw new Error();
+    if (!user) {
+      console.log('[AUTH] User not found');
+      throw new Error();
+    }
     c.set('user', user);
     c.set('userRoles', user.roles);
+    console.log('[AUTH] User authenticated successfully');
     await next();
-  } catch {
+  } catch (err) {
+    console.error(`[AUTH ERROR] Invalid token: ${err.message}`);
     return c.json({ error: 'Invalid token' }, 401);
   }
 }

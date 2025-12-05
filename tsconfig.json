@@ -2,7 +2,7 @@
   "compilerOptions": {
     "target": "ES2022",
     "module": "ES2022",
-    "lib": ["ES2022", "WebWorker"],
+    "lib": ["ES2022"],
     "moduleResolution": "Bundler",
     "strict": true,
     "sourceMap": true,
@@ -10,7 +10,6 @@
     "rootDir": ".",
     "skipLibCheck": true,
     "esModuleInterop": true,
-    "typeRoots": ["./src/types", "./node_modules/@types"],
     "types": ["@cloudflare/workers-types"]
   },
   "include": ["src", "public", "public/ts"]
