@@ -1,4 +1,4 @@
-// src/js/app.js
+// public/js/app.js
 const API_BASE = '/api';
 
 export const api = async (path, options = {}) => {

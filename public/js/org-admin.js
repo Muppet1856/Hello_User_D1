@@ -1,4 +1,4 @@
-// src/js/org-admin.js
+// public/js/org-admin.js
 import { api } from './app.js';
 
 // This file handles Org Admin tab population and logic
@@ -13,13 +13,11 @@ orgAdminTab.innerHTML = `
 // Load my orgs and build UI
 async function loadMyOrgs() {
   const res = await api('/my-orgs');
-
   if (!res.ok) {
     alert('Failed to load your organizations');
     return;
   }
   const orgs = await res.json();
-
   const accordion = document.getElementById('orgAccordion');
   accordion.innerHTML = '';
 
@@ -30,7 +28,7 @@ async function loadMyOrgs() {
 
   orgs.forEach((org, index) => {
     const itemId = `org-${org.id}`;
-    const collapseId = `collapse-${org.id}`;
+    const collapseId = `collapse-org-${org.id}`;
     const item = document.createElement('div');
     item.className = 'accordion-item';
     item.innerHTML = `
@@ -42,29 +40,23 @@ async function loadMyOrgs() {
       <div id="${collapseId}" class="accordion-collapse collapse ${index === 0 ? 'show' : ''}" aria-labelledby="${itemId}" data-bs-parent="#orgAccordion">
         <div class="accordion-body">
           <div class="mb-4">
-            <h4>Create New Team</h4>
-            <input id="new-team-name-${org.id}" class="form-control mb-2" placeholder="Team Name" type="text">
-            <button class="btn btn-primary create-team-btn" data-org-id="${org.id}">Create Team</button>
+            <h4>Create Team</h4>
+            <input id="new-team-name-${org.id}" class="form-control mb-2" placeholder="Team Name">
+            <button class="btn btn-primary create-team-btn" data-org-id="${org.id}">Create</button>
             <div id="create-team-message-${org.id}" class="mt-2"></div>
           </div>
-          <div>
-            <h4>Existing Teams</h4>
-            <ul id="team-list-${org.id}" class="list-group"></ul>
-          </div>
+          <div class="accordion" id="teamAccordion-${org.id}"></div>
         </div>
       </div>
     `;
     accordion.appendChild(item);
 
-    loadTeams(org.id);
-
-    // Attach create handler
+    // Attach create team handler
     item.querySelector('.create-team-btn').addEventListener('click', async (e) => {
       const orgId = e.target.dataset.orgId;
-      const nameInput = document.getElementById(`new-team-name-${orgId}`);
-      const name = nameInput.value.trim();
+      const name = document.getElementById(`new-team-name-${orgId}`).value.trim();
       if (!name) {
-        alert('Please enter a name');
+        alert('Please enter a team name');
         return;
       }
       const res = await api(`/organizations/${orgId}/teams`, {
@@ -74,104 +66,238 @@ async function loadMyOrgs() {
       const msg = document.getElementById(`create-team-message-${orgId}`);
       if (res.ok) {
         msg.innerHTML = '<div class="alert alert-success">Team created!</div>';
-        nameInput.value = ''; // Clear the form
-        loadTeams(orgId); // Refresh list
+        loadTeamsForOrg(orgId); // Refresh teams
       } else {
         msg.innerHTML = '<div class="alert alert-danger">Failed to create team.</div>';
       }
     });
+
+    loadTeamsForOrg(org.id);
   });
 }
 
 // Load teams for a specific org
-async function loadTeams(orgId) {
+async function loadTeamsForOrg(orgId) {
   const res = await api(`/organizations/${orgId}/teams`);
   if (!res.ok) {
     alert('Failed to load teams');
     return;
   }
   const teams = await res.json();
-  const teamList = document.getElementById(`team-list-${orgId}`);
-  teamList.innerHTML = '';
-  teams.forEach(team => {
-    const li = document.createElement('li');
-    li.className = 'list-group-item';
-    li.innerHTML = `
-      <div class="d-flex justify-content-between align-items-center">
-        <span id="team-name-${team.id}">${team.name} (ID: ${team.id})</span>
-        <div>
-          <input class="form-control d-inline-block w-auto me-2" id="rename-team-${team.id}" placeholder="New Name" type="text">
-          <button class="btn btn-warning rename-team-btn me-2" data-team-id="${team.id}">Rename</button>
-          <button class="btn btn-danger delete-team-btn me-2" data-team-id="${team.id}">Delete</button>
-          <input class="form-control d-inline-block w-auto me-2" id="invite-email-${team.id}" placeholder="Email to invite" type="email">
-          <button class="btn btn-secondary invite-team-btn" data-team-id="${team.id}">Invite as Team Admin</button>
+  const teamAccordion = document.getElementById(`teamAccordion-${orgId}`);
+  teamAccordion.innerHTML = '';
+
+  if (!teams.length) {
+    teamAccordion.innerHTML = '<p>No teams found.</p>';
+    return;
+  }
+
+  teams.forEach((team, index) => {
+    const itemId = `team-${team.id}-${orgId}`;
+    const collapseId = `collapse-team-${team.id}-${orgId}`;
+    const item = document.createElement('div');
+    item.className = 'accordion-item';
+    item.innerHTML = `
+      <h2 class="accordion-header" id="${itemId}">
+        <button class="accordion-button ${index === 0 ? '' : 'collapsed'}" type="button" data-bs-toggle="collapse" data-bs-target="#${collapseId}" aria-expanded="${index === 0 ? 'true' : 'false'}" aria-controls="${collapseId}">
+          ${team.name} (ID: ${team.id})
+        </button>
+      </h2>
+      <div id="${collapseId}" class="accordion-collapse collapse ${index === 0 ? 'show' : ''}" aria-labelledby="${itemId}" data-bs-parent="#teamAccordion-${orgId}">
+        <div class="accordion-body">
+          <div class="mb-3">
+            <h5>Rename Team</h5>
+            <input id="rename-team-${team.id}" class="form-control mb-2" placeholder="New Name" value="${team.name}">
+            <button class="btn btn-warning rename-btn" data-team-id="${team.id}">Rename</button>
+            <div id="rename-message-${team.id}" class="mt-2"></div>
+          </div>
+          <div class="mb-3">
+            <button class="btn btn-danger delete-btn" data-team-id="${team.id}">Delete Team</button>
+            <div id="delete-message-${team.id}" class="mt-2"></div>
+          </div>
+          <div class="mb-4">
+            <h4>Invite User</h4>
+            <div class="row mb-3">
+              <div class="col-md-6">
+                <input id="invite-email-${team.id}" class="form-control mb-2" placeholder="Email" type="email">
+              </div>
+              <div class="col-md-4">
+                <select id="invite-role-${team.id}" class="form-select mb-2">
+                  <option value="team_admin">Team Admin</option>
+                  <option value="statistician">Statistician</option>
+                  <option value="member">Member</option>
+                  <option value="guest">Guest</option>
+                </select>
+              </div>
+              <div class="col-md-2">
+                <button class="btn btn-secondary invite-btn" data-team-id="${team.id}">Invite</button>
+              </div>
+            </div>
+            <div id="invite-message-${team.id}" class="mt-2"></div>
+          </div>
+          <div class="mb-4">
+            <h4>Existing Members</h4>
+            <div class="table-responsive">
+              <table class="table table-striped table-hover">
+                <thead>
+                  <tr>
+                    <th>Role</th>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="member-table-${team.id}"></tbody>
+              </table>
+            </div>
+          </div>
         </div>
       </div>
-      <div id="team-message-${team.id}" class="mt-2"></div>
-      <div id="invite-message-${team.id}" class="mt-2"></div>
     `;
-    teamList.appendChild(li);
-  });
+    teamAccordion.appendChild(item);
 
-  // Attach rename handlers
-  document.querySelectorAll(`#team-list-${orgId} .rename-team-btn`).forEach(btn => {
-    btn.addEventListener('click', async (e) => {
+    // Attach rename handler
+    item.querySelector('.rename-btn').addEventListener('click', async (e) => {
       const teamId = e.target.dataset.teamId;
-      const newName = document.getElementById(`rename-team-${teamId}`).value.trim();
-      if (!newName) {
+      const name = document.getElementById(`rename-team-${teamId}`).value.trim();
+      if (!name) {
         alert('Please enter a new name');
         return;
       }
-      if (!confirm(`Rename team to ${newName}?`)) return;
       const res = await api(`/teams/${teamId}`, {
         method: 'PUT',
-        body: JSON.stringify({ name: newName })
+        body: JSON.stringify({ name })
       });
-      const msg = document.getElementById(`team-message-${teamId}`);
+      const msg = document.getElementById(`rename-message-${teamId}`);
       if (res.ok) {
         msg.innerHTML = '<div class="alert alert-success">Team renamed!</div>';
-        document.getElementById(`team-name-${teamId}`).textContent = `${newName} (ID: ${teamId})`;
-        document.getElementById(`rename-team-${teamId}`).value = ''; // Clear input
+        loadTeamsForOrg(orgId); // Refresh
       } else {
         msg.innerHTML = '<div class="alert alert-danger">Failed to rename team.</div>';
       }
     });
-  });
 
-  // Attach delete handlers
-  document.querySelectorAll(`#team-list-${orgId} .delete-team-btn`).forEach(btn => {
-    btn.addEventListener('click', async (e) => {
+    // Attach delete handler
+    item.querySelector('.delete-btn').addEventListener('click', async (e) => {
       const teamId = e.target.dataset.teamId;
-      if (!confirm('Delete this team? This will also delete related roles.')) return;
+      if (!confirm('Delete this team?')) return;
       const res = await api(`/teams/${teamId}`, { method: 'DELETE' });
-      const msg = document.getElementById(`team-message-${teamId}`);
+      const msg = document.getElementById(`delete-message-${teamId}`);
       if (res.ok) {
         msg.innerHTML = '<div class="alert alert-success">Team deleted!</div>';
-        loadTeams(orgId); // Refresh list
+        loadTeamsForOrg(orgId); // Refresh
       } else {
         msg.innerHTML = '<div class="alert alert-danger">Failed to delete team.</div>';
       }
     });
-  });
 
-  // Attach invite handlers (unchanged)
-  document.querySelectorAll(`#team-list-${orgId} .invite-team-btn`).forEach(btn => {
-    btn.addEventListener('click', async (e) => {
+    // Attach invite handler
+    item.querySelector('.invite-btn').addEventListener('click', async (e) => {
       const teamId = e.target.dataset.teamId;
       const email = document.getElementById(`invite-email-${teamId}`).value.trim();
+      const role = document.getElementById(`invite-role-${teamId}`).value;
       if (!email) {
         alert('Please enter an email');
         return;
       }
-      const res = await api(`/teams/${teamId}/invite-admin`, {
+      let endpoint = `/teams/${teamId}/invite`;
+      let body = { email, role };
+      if (role === 'team_admin') {
+        endpoint = `/teams/${teamId}/invite-admin`;
+        body = { email };
+      }
+      const res = await api(endpoint, {
         method: 'POST',
-        body: JSON.stringify({ email })
+        body: JSON.stringify(body)
       });
       const msg = document.getElementById(`invite-message-${teamId}`);
       if (res.ok) {
         msg.innerHTML = '<div class="alert alert-success">Invitation sent!</div>';
+        loadMembers(teamId); // Refresh members
       } else {
         msg.innerHTML = '<div class="alert alert-danger">Failed to send invitation.</div>';
+      }
+    });
+
+    loadMembers(team.id);
+  });
+}
+
+// Load members for a specific team (same as in team-admin.js, but with re-assign)
+async function loadMembers(teamId) {
+  const res = await api(`/teams/${teamId}/members`);
+  if (!res.ok) {
+    alert('Failed to load members');
+    return;
+  }
+  let members = await res.json();
+
+  // Sort members: team_admin first, then statistician, member, guest
+  const rolePriority = {
+    'team_admin': 0,
+    'statistician': 1,
+    'member': 2,
+    'guest': 3
+  };
+  members.sort((a, b) => rolePriority[a.role] - rolePriority[b.role]);
+
+  const memberTableBody = document.getElementById(`member-table-${teamId}`);
+  memberTableBody.innerHTML = '';
+  members.forEach(member => {
+    const displayRole = member.role === 'team_admin' ? 'Team Admin' : member.role.charAt(0).toUpperCase() + member.role.slice(1);
+    const row = document.createElement('tr');
+    row.innerHTML = `
+      <td><span id="role-${member.user_id}-${teamId}">${displayRole}</span></td>
+      <td>${member.name || 'No Name'}</td>
+      <td>${member.email}</td>
+      <td>
+        <select id="new-role-${member.user_id}-${teamId}" class="form-select d-inline-block w-auto me-2">
+          <option value="team_admin">Team Admin</option>
+          <option value="statistician">Statistician</option>
+          <option value="member">Member</option>
+          <option value="guest">Guest</option>
+        </select>
+        <button class="btn btn-warning btn-sm reassign-btn me-2" data-user-id="${member.user_id}" data-team-id="${teamId}">Re-assign</button>
+        <button class="btn btn-danger btn-sm remove-btn" data-user-id="${member.user_id}" data-team-id="${teamId}">Remove</button>
+      </td>
+    `;
+    memberTableBody.appendChild(row);
+  });
+
+  // Attach re-assign handlers
+  document.querySelectorAll(`#member-table-${teamId} .reassign-btn`).forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      const userId = e.target.dataset.userId;
+      const teamId = e.target.dataset.teamId;
+      const newRole = document.getElementById(`new-role-${userId}-${teamId}`).value;
+      if (!confirm(`Re-assign to ${newRole.charAt(0).toUpperCase() + newRole.slice(1)}?`)) return;
+      const res = await api(`/teams/${teamId}/members/${userId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ role: newRole })
+      });
+      if (res.ok) {
+        alert('Role updated!');
+        const displayNewRole = newRole === 'team_admin' ? 'Team Admin' : newRole.charAt(0).toUpperCase() + newRole.slice(1);
+        document.getElementById(`role-${userId}-${teamId}`).textContent = displayNewRole;
+        loadMembers(teamId); // Refresh for sorting
+      } else {
+        alert('Failed to update role.');
+      }
+    });
+  });
+
+  // Attach remove handlers
+  document.querySelectorAll(`#member-table-${teamId} .remove-btn`).forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      const userId = e.target.dataset.userId;
+      const teamId = e.target.dataset.teamId;
+      if (!confirm('Remove this user from the team?')) return;
+      const res = await api(`/teams/${teamId}/members/${userId}`, { method: 'DELETE' });
+      if (res.ok) {
+        alert('User removed!');
+        loadMembers(teamId); // Refresh list
+      } else {
+        alert('Failed to remove user.');
       }
     });
   });

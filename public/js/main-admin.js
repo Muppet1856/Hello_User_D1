@@ -1,4 +1,4 @@
-// src/js/main-admin.js
+// public/js/main-admin.js
 import { api } from './app.js';
 
 // This file handles Main Admin tab population and logic

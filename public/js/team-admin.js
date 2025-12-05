@@ -1,4 +1,4 @@
-// src/js/team-admin.js
+// public/js/team-admin.js
 import { api } from './app.js';
 
 // This file handles Team Admin tab population and logic

@@ -1,3 +1,4 @@
+// src/teams.ts
 import { Hono } from 'hono';
 import { z } from 'zod';
 import jwt from '@tsndr/cloudflare-worker-jwt';
@@ -89,7 +90,11 @@ teams.post('/teams/:teamId/invite-admin', async (c) => {
     from: 'registration@volleyballscore.app',
     to: email,
     subject: `Invitation to Admin Team: ${team.name}`,
-    html: `<p>You've been invited to admin the team ${team.name}. Click <a href="${inviteUrl}">here</a> to accept (expires in 24 hours).</p>`,
+    html: `
+
+You've been invited to admin the team ${team.name}. Click [here](${inviteUrl}) to accept (expires in 24 hours).
+
+`,
   });
 
   return c.json({ success: true });
@@ -104,7 +109,7 @@ teams.post('/teams/:teamId/invite', async (c) => {
     return c.json({ error: 'Team not found' }, 404);
   }
 
-  if (!isTeamAdminForTeam(userRoles, teamId)) {
+  if (!isTeamAdminForTeam(userRoles, teamId) && !isOrgAdminForOrg(userRoles, team.org_id)) {
     return c.json({ error: 'Forbidden' }, 403);
   }
 
@@ -133,7 +138,11 @@ teams.post('/teams/:teamId/invite', async (c) => {
     from: 'registration@volleyballscore.app',
     to: email,
     subject: `Invitation to Join Team: ${team.name} as ${role.charAt(0).toUpperCase() + role.slice(1)}`,
-    html: `<p>You've been invited to join the team ${team.name} as a ${role}. Click <a href="${inviteUrl}">here</a> to accept (expires in 24 hours).</p>`,
+    html: `
+
+You've been invited to join the team ${team.name} as a ${role}. Click [here](${inviteUrl}) to accept (expires in 24 hours).
+
+`,
   });
 
   return c.json({ success: true });
@@ -143,7 +152,11 @@ teams.post('/teams/:teamId/invite', async (c) => {
 teams.get('/teams/:teamId/members', async (c) => {
   const teamId = c.req.param('teamId');
   const userRoles = c.get('userRoles');
-  if (!isTeamAdminForTeam(userRoles, teamId)) {
+  const team = await c.env.DB.prepare('SELECT org_id FROM teams WHERE id = ?').bind(teamId).first();
+  if (!team) {
+    return c.json({ error: 'Team not found' }, 404);
+  }
+  if (!isTeamAdminForTeam(userRoles, teamId) && !isOrgAdminForOrg(userRoles, team.org_id)) {
     return c.json({ error: 'Forbidden' }, 403);
   }
 
@@ -161,13 +174,12 @@ teams.put('/teams/:teamId/members/:userId', async (c) => {
   const teamId = c.req.param('teamId');
   const userId = c.req.param('userId');
   const userRoles = c.get('userRoles');
-  if (!isTeamAdminForTeam(userRoles, teamId)) {
-    return c.json({ error: 'Forbidden' }, 403);
-  }
-
   const team = await c.env.DB.prepare('SELECT org_id FROM teams WHERE id = ?').bind(teamId).first();
   if (!team) {
     return c.json({ error: 'Team not found' }, 404);
+  }
+  if (!isTeamAdminForTeam(userRoles, teamId) && !isOrgAdminForOrg(userRoles, team.org_id)) {
+    return c.json({ error: 'Forbidden' }, 403);
   }
 
   const currentRoleRow = await c.env.DB.prepare('SELECT role FROM user_roles WHERE user_id = ? AND team_id = ?').bind(userId, teamId).first();
@@ -176,17 +188,17 @@ teams.put('/teams/:teamId/members/:userId', async (c) => {
   }
 
   const body = await c.req.json();
-  const { role: newRole } = z.object({ role: z.enum(['statistician', 'member', 'guest']) }).parse(body);
+  const { role: newRole } = z.object({ role: z.enum(['team_admin', 'statistician', 'member', 'guest']) }).parse(body);
 
   if (currentRoleRow.role === newRole) {
     return c.json({ success: true });
   }
 
-  // Delete old role
-  await c.env.DB.prepare('DELETE FROM user_roles WHERE user_id = ? AND team_id = ? AND role = ?').bind(userId, teamId, currentRoleRow.role).run();
-
-  // Insert new role
-  await c.env.DB.prepare('INSERT INTO user_roles (user_id, role, org_id, team_id) VALUES (?, ?, ?, ?)').bind(userId, newRole, team.org_id, teamId).run();
+  // Update the role directly (since unique per scope)
+  const result = await c.env.DB.prepare('UPDATE user_roles SET role = ? WHERE user_id = ? AND team_id = ?').bind(newRole, userId, teamId).run();
+  if (result.meta.changes === 0) {
+    return c.json({ error: 'Failed to update role' }, 500);
+  }
 
   return c.json({ success: true });
 });
@@ -196,7 +208,11 @@ teams.delete('/teams/:teamId/members/:userId', async (c) => {
   const teamId = c.req.param('teamId');
   const userId = c.req.param('userId');
   const userRoles = c.get('userRoles');
-  if (!isTeamAdminForTeam(userRoles, teamId)) {
+  const team = await c.env.DB.prepare('SELECT org_id FROM teams WHERE id = ?').bind(teamId).first();
+  if (!team) {
+    return c.json({ error: 'Team not found' }, 404);
+  }
+  if (!isTeamAdminForTeam(userRoles, teamId) && !isOrgAdminForOrg(userRoles, team.org_id)) {
     return c.json({ error: 'Forbidden' }, 403);
   }
 
@@ -205,8 +221,8 @@ teams.delete('/teams/:teamId/members/:userId', async (c) => {
     return c.json({ error: 'User not in team' }, 404);
   }
 
-  // Delete the role
-  await c.env.DB.prepare('DELETE FROM user_roles WHERE user_id = ? AND team_id = ? AND role = ?').bind(userId, teamId, roleRow.role).run();
+  // Delete the row (no role in WHERE, as unique per user/team)
+  await c.env.DB.prepare('DELETE FROM user_roles WHERE user_id = ? AND team_id = ?').bind(userId, teamId).run();
 
   // Check if user should be deleted
   const { results: remainingRoles } = await c.env.DB.prepare('SELECT role, team_id FROM user_roles WHERE user_id = ?').bind(userId).all();
