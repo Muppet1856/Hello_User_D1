@@ -10,6 +10,7 @@
     "rootDir": ".",
     "skipLibCheck": true,
     "esModuleInterop": true,
+    "typeRoots": ["./src/types", "./node_modules/@types"],
     "types": ["@cloudflare/workers-types"]
   },
   "include": ["src", "public", "public/ts"]
