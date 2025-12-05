@@ -7,120 +7,20 @@ import { api } from './app.js';
 const mainAdminTab = document.getElementById('main-admin');
 mainAdminTab.innerHTML = `
   <h3>Main Admin - Organization Manager</h3>
-  
   <div class="mb-4">
-    <h4>Create New Organization</h4>
-    <input id="new-org-name" class="form-control mb-2" placeholder="Organization Name" type="text">
-    <button id="create-org-btn" class="btn btn-primary">Create Organization</button>
+    <h4>Create Organization</h4>
+    <input id="new-org-name" class="form-control mb-2" placeholder="Organization Name">
+    <button class="btn btn-primary" id="create-org-btn">Create</button>
     <div id="create-org-message" class="mt-2"></div>
   </div>
-  
-  <div>
-    <h4>Existing Organizations</h4>
-    <ul id="org-list" class="list-group"></ul>
-  </div>
+  <div class="accordion" id="orgAccordion"></div>
 `;
 
-// Load org list
-async function loadOrgs() {
-  const res = await api('/organizations');
-  if (!res.ok) {
-    alert('Failed to load organizations');
-    return;
-  }
-  const orgs = await res.json();
-  const orgList = document.getElementById('org-list');
-  orgList.innerHTML = '';
-  orgs.forEach(org => {
-    const li = document.createElement('li');
-    li.className = 'list-group-item';
-    li.innerHTML = `
-      <div class="d-flex justify-content-between align-items-center">
-        <span id="org-name-${org.id}">${org.name} (ID: ${org.id})</span>
-        <div>
-          <input class="form-control d-inline-block w-auto me-2" id="rename-org-${org.id}" placeholder="New Name" type="text">
-          <button class="btn btn-warning rename-btn me-2" data-org-id="${org.id}">Rename</button>
-          <button class="btn btn-danger delete-btn me-2" data-org-id="${org.id}">Delete</button>
-          <input class="form-control d-inline-block w-auto me-2" id="invite-email-${org.id}" placeholder="Email to invite" type="email">
-          <button class="btn btn-secondary invite-btn" data-org-id="${org.id}">Invite as Org Admin</button>
-        </div>
-      </div>
-      <div id="org-message-${org.id}" class="mt-2"></div>
-      <div id="invite-message-${org.id}" class="mt-2"></div>
-    `;
-    orgList.appendChild(li);
-  });
-
-  // Attach rename handlers
-  document.querySelectorAll('.rename-btn').forEach(btn => {
-    btn.addEventListener('click', async (e) => {
-      const orgId = e.target.dataset.orgId;
-      const newName = document.getElementById(`rename-org-${orgId}`).value.trim();
-      if (!newName) {
-        alert('Please enter a new name');
-        return;
-      }
-      if (!confirm(`Rename organization to ${newName}?`)) return;
-      const res = await api(`/organizations/${orgId}`, {
-        method: 'PUT',
-        body: JSON.stringify({ name: newName })
-      });
-      const msg = document.getElementById(`org-message-${orgId}`);
-      if (res.ok) {
-        msg.innerHTML = '<div class="alert alert-success">Organization renamed!</div>';
-        document.getElementById(`org-name-${orgId}`).textContent = `${newName} (ID: ${orgId})`;
-        document.getElementById(`rename-org-${orgId}`).value = ''; // Clear input
-      } else {
-        msg.innerHTML = '<div class="alert alert-danger">Failed to rename organization.</div>';
-      }
-    });
-  });
-
-  // Attach delete handlers
-  document.querySelectorAll('.delete-btn').forEach(btn => {
-    btn.addEventListener('click', async (e) => {
-      const orgId = e.target.dataset.orgId;
-      if (!confirm('Delete this organization? This will also delete related teams and roles.')) return;
-      const res = await api(`/organizations/${orgId}`, { method: 'DELETE' });
-      const msg = document.getElementById(`org-message-${orgId}`);
-      if (res.ok) {
-        msg.innerHTML = '<div class="alert alert-success">Organization deleted!</div>';
-        loadOrgs(); // Refresh list
-      } else {
-        msg.innerHTML = '<div class="alert alert-danger">Failed to delete organization.</div>';
-      }
-    });
-  });
-
-  // Attach invite handlers (unchanged)
-  document.querySelectorAll('.invite-btn').forEach(btn => {
-    btn.addEventListener('click', async (e) => {
-      const orgId = e.target.dataset.orgId;
-      const email = document.getElementById(`invite-email-${orgId}`).value.trim();
-      if (!email) {
-        alert('Please enter an email');
-        return;
-      }
-      const res = await api(`/organizations/${orgId}/invite-admin`, {
-        method: 'POST',
-        body: JSON.stringify({ email })
-      });
-      const msg = document.getElementById(`invite-message-${orgId}`);
-      if (res.ok) {
-        msg.innerHTML = '<div class="alert alert-success">Invitation sent!</div>';
-      } else {
-        msg.innerHTML = '<div class="alert alert-danger">Failed to send invitation.</div>';
-      }
-    });
-  });
-}
-
-// Create org handler
+// Attach create org handler
 document.getElementById('create-org-btn').addEventListener('click', async () => {
-  const nameInput = document.getElementById('new-org-name');
-  const name = nameInput.value.trim();
+  const name = document.getElementById('new-org-name').value.trim();
   if (!name) {
-    alert('Please enter a name');
+    alert('Please enter an organization name');
     return;
   }
   const res = await api('/organizations', {
@@ -130,17 +30,226 @@ document.getElementById('create-org-btn').addEventListener('click', async () => 
   const msg = document.getElementById('create-org-message');
   if (res.ok) {
     msg.innerHTML = '<div class="alert alert-success">Organization created!</div>';
-    nameInput.value = ''; // Clear the form
-    loadOrgs(); // Refresh list
+    loadAllOrgs(); // Refresh orgs
   } else {
     msg.innerHTML = '<div class="alert alert-danger">Failed to create organization.</div>';
   }
 });
 
+// Load all orgs and build UI
+async function loadAllOrgs() {
+  const res = await api('/organizations');
+  if (!res.ok) {
+    alert('Failed to load organizations');
+    return;
+  }
+  const orgs = await res.json();
+  const accordion = document.getElementById('orgAccordion');
+  accordion.innerHTML = '';
+
+  if (!orgs.length) {
+    accordion.innerHTML = '<p>No organizations found.</p>';
+    return;
+  }
+
+  orgs.forEach((org) => {
+    const itemId = `org-${org.id}`;
+    const collapseId = `collapse-org-${org.id}`;
+    const item = document.createElement('div');
+    item.className = 'accordion-item';
+    item.innerHTML = `
+      <h2 class="accordion-header" id="${itemId}">
+        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#${collapseId}" aria-expanded="false" aria-controls="${collapseId}">
+          <table class="w-100">
+            <tr>
+              <td>${org.name} (ID: ${org.id})</td>
+              <td class="text-end pe-5">
+                <button class="btn btn-warning btn-sm rename-btn me-1" data-org-id="${org.id}" data-org-name="${org.name}">Rename</button>
+                <button class="btn btn-danger btn-sm delete-btn" data-org-id="${org.id}">Delete</button>
+              </td>
+            </tr>
+          </table>
+        </button>
+      </h2>
+      <div id="${collapseId}" class="accordion-collapse collapse" aria-labelledby="${itemId}" data-bs-parent="#orgAccordion">
+        <div class="accordion-body">
+          <div class="mb-4">
+            <h4>Invite Org Admin</h4>
+            <input id="invite-org-admin-email-${org.id}" class="form-control mb-2" placeholder="Email" type="email">
+            <button class="btn btn-secondary invite-org-admin-btn" data-org-id="${org.id}">Invite</button>
+            <div id="invite-org-admin-message-${org.id}" class="mt-2"></div>
+          </div>
+          <div class="accordion" id="teamAccordion-${org.id}"></div>
+        </div>
+      </div>
+    `;
+    accordion.appendChild(item);
+
+    // Attach rename handler (opens modal)
+    item.querySelector('.rename-btn').addEventListener('click', (e) => {
+      e.stopPropagation(); // Prevent triggering collapse
+      const orgId = e.target.dataset.orgId;
+      const currentName = e.target.dataset.orgName;
+      showRenameModal(orgId, currentName);
+    });
+
+    // Attach delete handler (opens modal)
+    item.querySelector('.delete-btn').addEventListener('click', (e) => {
+      e.stopPropagation(); // Prevent triggering collapse
+      const orgId = e.target.dataset.orgId;
+      showDeleteModal(orgId);
+    });
+
+    // Attach invite org admin handler
+    item.querySelector('.invite-org-admin-btn').addEventListener('click', async (e) => {
+      const orgId = e.target.dataset.orgId;
+      const email = document.getElementById(`invite-org-admin-email-${orgId}`).value.trim();
+      if (!email) {
+        alert('Please enter an email');
+        return;
+      }
+      const res = await api(`/organizations/${orgId}/invite-admin`, {
+        method: 'POST',
+        body: JSON.stringify({ email })
+      });
+      const msg = document.getElementById(`invite-org-admin-message-${orgId}`);
+      if (res.ok) {
+        msg.innerHTML = '<div class="alert alert-success">Invitation sent!</div>';
+      } else {
+        msg.innerHTML = '<div class="alert alert-danger">Failed to send invitation.</div>';
+      }
+    });
+
+    loadTeamsForOrg(org.id);
+  });
+}
+
+// Load teams for a specific org (if needed; assuming similar to org-admin)
+async function loadTeamsForOrg(orgId) {
+  // Implement if Main Admin needs team listing inside orgs; otherwise remove or leave empty
+  const res = await api(`/organizations/${orgId}/teams`);
+  if (!res.ok) {
+    alert('Failed to load teams');
+    return;
+  }
+  const teams = await res.json();
+  const teamAccordion = document.getElementById(`teamAccordion-${orgId}`);
+  teamAccordion.innerHTML = '';
+
+  if (!teams.length) {
+    teamAccordion.innerHTML = '<p>No teams found.</p>';
+    return;
+  }
+
+  // Add team accordions similar to org-admin.js if required
+  // For now, assuming not needed; extend as per your repo
+}
+
+// Function to show rename modal
+function showRenameModal(orgId, currentName) {
+  const modalId = `renameModal-${orgId}`;
+  const modal = document.createElement('div');
+  modal.className = 'modal fade';
+  modal.id = modalId;
+  modal.innerHTML = `
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Rename Organization</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <form>
+            <div class="mb-3">
+              <label for="new-org-name-${orgId}" class="form-label">New Organization Name</label>
+              <input type="text" class="form-control" id="new-org-name-${orgId}" value="${currentName}">
+            </div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-primary confirm-rename-btn">OK</button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+
+  const bsModal = new bootstrap.Modal(modal);
+  bsModal.show();
+
+  // Attach confirm rename handler
+  modal.querySelector('.confirm-rename-btn').addEventListener('click', async () => {
+    const name = document.getElementById(`new-org-name-${orgId}`).value.trim();
+    if (!name) {
+      alert('Please enter a new name');
+      return;
+    }
+    const res = await api(`/organizations/${orgId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ name })
+    });
+    if (res.ok) {
+      alert('Organization renamed!');
+      loadAllOrgs(); // Refresh
+    } else {
+      alert('Failed to rename organization.');
+    }
+    bsModal.hide();
+  });
+
+  // Clean up modal after hide
+  modal.addEventListener('hidden.bs.modal', () => modal.remove());
+}
+
+// Function to show delete confirm modal
+function showDeleteModal(orgId) {
+  const modalId = `deleteModal-${orgId}`;
+  const modal = document.createElement('div');
+  modal.className = 'modal fade';
+  modal.id = modalId;
+  modal.innerHTML = `
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Confirm Delete</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p>Are you sure you want to delete this organization? This action cannot be undone.</p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">No</button>
+          <button type="button" class="btn btn-danger confirm-delete-btn">Yes</button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+
+  const bsModal = new bootstrap.Modal(modal);
+  bsModal.show();
+
+  // Attach confirm delete handler
+  modal.querySelector('.confirm-delete-btn').addEventListener('click', async () => {
+    const res = await api(`/organizations/${orgId}`, { method: 'DELETE' });
+    if (res.ok) {
+      alert('Organization deleted!');
+      loadAllOrgs(); // Refresh
+    } else {
+      alert('Failed to delete organization.');
+    }
+    bsModal.hide();
+  });
+
+  // Clean up modal after hide
+  modal.addEventListener('hidden.bs.modal', () => modal.remove());
+}
+
 // Initialization function called from app.js
 export function initMainAdmin() {
   const mainTabLink = document.querySelector('#main-admin-nav a');
   if (mainTabLink) {
-    mainTabLink.addEventListener('shown.bs.tab', loadOrgs);
+    mainTabLink.addEventListener('shown.bs.tab', loadAllOrgs);
   }
 }
