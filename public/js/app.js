@@ -58,39 +58,39 @@ async function loadDashboard() {
   const res = await api('/me');
   if (!res.ok) {
     localStorage.removeItem('token');
-    document.getElementById('login-form').style.display = 'block';
-    document.getElementById('dashboard').style.display = 'none';
+    document.getElementById('login-form').classList.remove('invisible');
+    document.getElementById('dashboard').classList.add('invisible');
     return;
   }
 
   const user = await res.json();
   console.log('User data from /me:', user);  // Debug: Log user data
 
-  document.getElementById('login-form').style.display = 'none';
-  document.getElementById('dashboard').style.display = 'block';
+  document.getElementById('login-form').classList.add('invisible');
+  document.getElementById('dashboard').classList.remove('invisible');
 
   const roles = user.roles || [];
   const isMain = roles.some(r => r.role === 'main_admin');
   console.log('User roles:', roles, 'isMain:', isMain);  // Debug: Log roles and main admin status
 
   if (isMain) {
-    document.getElementById('main-admin-nav').style.display = 'list-item';
+    document.getElementById('main-admin-nav').classList.remove('invisible');
     const { initMainAdmin } = await import('./main-admin.js');
     initMainAdmin();
   }
   if (roles.some(r => r.role === 'org_admin') || isMain) {
-    document.getElementById('org-admin-nav').style.display = 'list-item';
+    document.getElementById('org-admin-nav').classList.remove('invisible');
     const { initOrgAdmin } = await import('./org-admin.js');
     initOrgAdmin();
   }
   if (roles.some(r => r.role === 'team_admin') || isMain) {
-    document.getElementById('team-admin-nav').style.display = 'list-item';
+    document.getElementById('team-admin-nav').classList.remove('invisible');
     const { initTeamAdmin } = await import('./team-admin.js');
     initTeamAdmin();
   }
 
   // Activate the first visible tab
-  const firstVisibleTab = document.querySelector('.nav-link[style*="list-item"]');
+  const firstVisibleTab = document.querySelector('.nav-link:not(.invisible)');
   if (firstVisibleTab) {
     new bootstrap.Tab(firstVisibleTab).show();
   }
