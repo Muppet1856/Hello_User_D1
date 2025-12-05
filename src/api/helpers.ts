@@ -36,27 +36,22 @@ export async function authMiddleware(c: Context<{ Bindings: Bindings }>, next: (
 
   const auth = c.req.header('Authorization');
   if (!auth?.startsWith('Bearer ')) {
-    console.log('[AUTH] Missing Bearer token');
     return c.json({ error: 'Unauthorized' }, 401);
   }
   const token = auth.slice(7);
   try {
     if (!await jwt.verify(token, c.env.JWT_SECRET)) {
-      console.log('[AUTH] Token verification failed');
       throw new Error();
     }
     const payload = jwt.decode(token).payload as { id: string };
     const user = await getUserWithRoles(c.env.DB, payload.id);
     if (!user) {
-      console.log('[AUTH] User not found');
       throw new Error();
     }
     c.set('user', user);
     c.set('userRoles', user.roles);
-    console.log('[AUTH] User authenticated successfully');
     await next();
-  } catch (err) {
-    console.error(`[AUTH ERROR] Invalid token: ${err.message}`);
+  } catch {
     return c.json({ error: 'Invalid token' }, 401);
   }
 }

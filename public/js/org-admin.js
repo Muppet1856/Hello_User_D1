@@ -11,24 +11,19 @@ orgAdminTab.innerHTML = `
 
 // Load my orgs and build UI
 async function loadMyOrgs() {
-  console.log('Loading my orgs...');  // Debug: Entering loadMyOrgs
   const res = await api('/my-orgs');
-  console.log('my-orgs response status:', res.status);  // Debug: API response status
 
   if (!res.ok) {
     alert('Failed to load your organizations');
-    console.log('my-orgs failed with status:', res.status);  // Debug: Failure status
     return;
   }
   const orgs = await res.json();
-  console.log('my-orgs data:', orgs);  // Debug: Log returned orgs data
 
   const accordion = document.getElementById('orgAccordion');
   accordion.innerHTML = '';
 
   if (!orgs.length) {
     accordion.innerHTML = '<p>No organizations found.</p>';
-    console.log('No orgs found in data');  // Debug: No orgs case
     return;
   }
 

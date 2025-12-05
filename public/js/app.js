@@ -64,14 +64,12 @@ async function loadDashboard() {
   }
 
   const user = await res.json();
-  console.log('User data from /me:', user);  // Debug: Log user data
 
   document.getElementById('login-form').classList.add('invisible');
   document.getElementById('dashboard').classList.remove('invisible');
 
   const roles = user.roles || [];
   const isMain = roles.some(r => r.role === 'main_admin');
-  console.log('User roles:', roles, 'isMain:', isMain);  // Debug: Log roles and main admin status
 
   if (isMain) {
     document.getElementById('main-admin-nav').classList.remove('invisible');
