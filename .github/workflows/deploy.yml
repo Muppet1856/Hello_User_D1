@@ -263,7 +263,7 @@ jobs:
         if: steps.cfg.outputs.type != 'skip'
         run: |
           FINAL_NAME="${{ env.FINAL_WORKER_NAME }}"
-          npx wrangler d1 migrations apply $FINAL_NAME
+          npx wrangler d1 migrations apply $FINAL_NAME --remote
 
       # ————————————————————————
       # Load env vars from .cloudflare/vars.json → wrangler.toml
