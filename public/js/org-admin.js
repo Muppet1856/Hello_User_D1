@@ -103,7 +103,7 @@ async function loadTeamsForOrg(orgId) {
           <table class="w-100">
             <tr>
               <td>${team.name} (ID: ${team.id})</td>
-              <td class="text-end">
+              <td class="text-end pe-5">
                 <button class="btn btn-warning btn-sm rename-btn me-1" data-team-id="${team.id}" data-team-name="${team.name}">Rename</button>
                 <button class="btn btn-danger btn-sm delete-btn" data-team-id="${team.id}">Delete</button>
               </td>
