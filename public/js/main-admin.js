@@ -16,6 +16,26 @@ mainAdminTab.innerHTML = `
   <div class="accordion" id="mainOrgAccordion"></div>
 `;
 
+// Preserve accordion open/closed state when rebuilding the DOM
+function getOpenCollapseIds(container) {
+  if (!container) return new Set();
+  return new Set(Array.from(container.querySelectorAll('.accordion-collapse.show')).map(el => el.id));
+}
+
+function restoreOpenCollapseState(container, openIds) {
+  if (!container || !openIds) return;
+  openIds.forEach(id => {
+    const collapseEl = container.querySelector(`#${id}`);
+    if (!collapseEl) return;
+    collapseEl.classList.add('show');
+    const trigger = container.querySelector(`[data-bs-target="#${id}"]`);
+    if (trigger) {
+      trigger.classList.remove('collapsed');
+      trigger.setAttribute('aria-expanded', 'true');
+    }
+  });
+}
+
 // Attach create org handler
 document.getElementById('create-org-btn').addEventListener('click', async () => {
   const name = document.getElementById('new-org-name').value.trim();
@@ -45,6 +65,8 @@ async function loadAllOrgs() {
   }
   const orgs = await res.json();
   const accordion = document.getElementById('mainOrgAccordion');
+  if (!accordion) return;
+  const openCollapseIds = getOpenCollapseIds(accordion);
   accordion.innerHTML = '';
 
   if (!orgs.length) {
@@ -52,14 +74,16 @@ async function loadAllOrgs() {
     return;
   }
 
-  orgs.forEach((org) => {
+  const teamLoaders = [];
+  for (const org of orgs) {
     const itemId = `main-org-${org.id}`;
     const collapseId = `main-collapse-org-${org.id}`;
+    const shouldExpand = openCollapseIds.has(collapseId);
     const item = document.createElement('div');
     item.className = 'accordion-item';
     item.innerHTML = `
       <h2 class="accordion-header" id="${itemId}">
-        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#${collapseId}" aria-expanded="false" aria-controls="${collapseId}">
+        <button class="accordion-button ${shouldExpand ? '' : 'collapsed'}" type="button" data-bs-toggle="collapse" data-bs-target="#${collapseId}" aria-expanded="${shouldExpand ? 'true' : 'false'}" aria-controls="${collapseId}">
           <table class="w-100">
             <tr>
               <td>${org.name} (ID: ${org.id})</td>
@@ -71,7 +95,7 @@ async function loadAllOrgs() {
           </table>
         </button>
       </h2>
-      <div id="${collapseId}" class="accordion-collapse collapse" aria-labelledby="${itemId}" data-bs-parent="#mainOrgAccordion">
+      <div id="${collapseId}" class="accordion-collapse collapse ${shouldExpand ? 'show' : ''}" aria-labelledby="${itemId}" data-bs-parent="#mainOrgAccordion">
         <div class="accordion-body">
           <div class="mb-4">
             <h4>Invite Org Admin</h4>
@@ -120,12 +144,15 @@ async function loadAllOrgs() {
       }
     });
 
-    loadTeamsForOrg(org.id);
-  });
+    teamLoaders.push(loadTeamsForOrg(org.id, openCollapseIds));
+  }
+
+  await Promise.all(teamLoaders);
+  restoreOpenCollapseState(accordion, openCollapseIds);
 }
 
 // Load teams for a specific org (if needed; assuming similar to org-admin)
-async function loadTeamsForOrg(orgId) {
+async function loadTeamsForOrg(orgId, openCollapseIds) {
   // Implement if Main Admin needs team listing inside orgs; otherwise remove or leave empty
   const res = await api(`/organizations/${orgId}/teams`);
   if (!res.ok) {
@@ -134,6 +161,10 @@ async function loadTeamsForOrg(orgId) {
   }
   const teams = await res.json();
   const teamAccordion = document.getElementById(`mainTeamAccordion-${orgId}`);
+  if (!teamAccordion) return;
+  const openTeamIds = openCollapseIds
+    ? new Set([...openCollapseIds].filter(id => id.includes('team') && id.endsWith(`-${orgId}`)))
+    : getOpenCollapseIds(teamAccordion);
   teamAccordion.innerHTML = '';
 
   if (!teams.length) {
@@ -143,6 +174,7 @@ async function loadTeamsForOrg(orgId) {
 
   // Add team accordions similar to org-admin.js if required
   // For now, assuming not needed; extend as per your repo
+  restoreOpenCollapseState(teamAccordion, openTeamIds);
 }
 
 // Function to show rename modal

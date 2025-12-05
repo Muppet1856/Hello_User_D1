@@ -10,6 +10,26 @@ orgAdminTab.innerHTML = `
   <div class="accordion" id="orgAccordion"></div>
 `;
 
+// Preserve accordion open/closed state when rebuilding the DOM
+function getOpenCollapseIds(container) {
+  if (!container) return new Set();
+  return new Set(Array.from(container.querySelectorAll('.accordion-collapse.show')).map(el => el.id));
+}
+
+function restoreOpenCollapseState(container, openIds) {
+  if (!container || !openIds) return;
+  openIds.forEach(id => {
+    const collapseEl = container.querySelector(`#${id}`);
+    if (!collapseEl) return;
+    collapseEl.classList.add('show');
+    const trigger = container.querySelector(`[data-bs-target="#${id}"]`);
+    if (trigger) {
+      trigger.classList.remove('collapsed');
+      trigger.setAttribute('aria-expanded', 'true');
+    }
+  });
+}
+
 async function getUserRoles() {
   const res = await api('/me');
   if (!res.ok) {
@@ -40,6 +60,8 @@ async function loadMyOrgs() {
   }
   const orgs = await res.json();
   const accordion = document.getElementById('orgAccordion');
+  if (!accordion) return;
+  const openCollapseIds = getOpenCollapseIds(accordion);
   accordion.innerHTML = '';
 
   if (!orgs.length) {
@@ -47,14 +69,16 @@ async function loadMyOrgs() {
     return;
   }
 
-  orgs.forEach((org) => {
+  const teamLoaders = [];
+  for (const org of orgs) {
     const itemId = `org-${org.id}`;
     const collapseId = `collapse-org-${org.id}`;
+    const shouldExpand = openCollapseIds.has(collapseId);
     const item = document.createElement('div');
     item.className = 'accordion-item';
     item.innerHTML = `
       <h2 class="accordion-header" id="${itemId}">
-        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#${collapseId}" aria-expanded="false" aria-controls="${collapseId}">
+        <button class="accordion-button ${shouldExpand ? '' : 'collapsed'}" type="button" data-bs-toggle="collapse" data-bs-target="#${collapseId}" aria-expanded="${shouldExpand ? 'true' : 'false'}" aria-controls="${collapseId}">
           <table class="w-100">
             <tr>
               <td>${org.name} (ID: ${org.id})</td>
@@ -66,7 +90,7 @@ async function loadMyOrgs() {
           </table>
         </button>
       </h2>
-      <div id="${collapseId}" class="accordion-collapse collapse" aria-labelledby="${itemId}" data-bs-parent="#orgAccordion">
+      <div id="${collapseId}" class="accordion-collapse collapse ${shouldExpand ? 'show' : ''}" aria-labelledby="${itemId}" data-bs-parent="#orgAccordion">
         <div class="accordion-body">
           <div class="mb-4">
             <h4>Create Team</h4>
@@ -116,12 +140,15 @@ async function loadMyOrgs() {
       }
     });
 
-    loadTeamsForOrg(org.id);
-  });
+    teamLoaders.push(loadTeamsForOrg(org.id, openCollapseIds));
+  }
+
+  await Promise.all(teamLoaders);
+  restoreOpenCollapseState(accordion, openCollapseIds);
 }
 
 // Load teams for a specific org
-async function loadTeamsForOrg(orgId) {
+async function loadTeamsForOrg(orgId, openCollapseIds) {
   console.log('Loading teams for org:', orgId);
   const res = await api(`/organizations/${orgId}/teams`);
   if (!res.ok) {
@@ -131,6 +158,10 @@ async function loadTeamsForOrg(orgId) {
   }
   const teams = await res.json();
   const teamAccordion = document.getElementById(`teamAccordion-${orgId}`);
+  if (!teamAccordion) return;
+  const openTeamIds = openCollapseIds
+    ? new Set([...openCollapseIds].filter(id => id.startsWith('collapse-team-') && id.endsWith(`-${orgId}`)))
+    : getOpenCollapseIds(teamAccordion);
   teamAccordion.innerHTML = '';
 
   if (!teams.length) {
@@ -141,11 +172,12 @@ async function loadTeamsForOrg(orgId) {
   teams.forEach((team) => {
     const itemId = `team-${team.id}-${orgId}`;
     const collapseId = `collapse-team-${team.id}-${orgId}`;
+    const shouldExpand = openTeamIds.has(collapseId);
     const item = document.createElement('div');
     item.className = 'accordion-item';
     item.innerHTML = `
       <h2 class="accordion-header" id="${itemId}">
-        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#${collapseId}" aria-expanded="false" aria-controls="${collapseId}">
+        <button class="accordion-button ${shouldExpand ? '' : 'collapsed'}" type="button" data-bs-toggle="collapse" data-bs-target="#${collapseId}" aria-expanded="${shouldExpand ? 'true' : 'false'}" aria-controls="${collapseId}">
           <table class="w-100">
             <tr>
               <td>${team.name} (ID: ${team.id})</td>
@@ -157,7 +189,7 @@ async function loadTeamsForOrg(orgId) {
           </table>
         </button>
       </h2>
-      <div id="${collapseId}" class="accordion-collapse collapse" aria-labelledby="${itemId}" data-bs-parent="#teamAccordion-${orgId}">
+      <div id="${collapseId}" class="accordion-collapse collapse ${shouldExpand ? 'show' : ''}" aria-labelledby="${itemId}" data-bs-parent="#teamAccordion-${orgId}">
         <div class="accordion-body">
           <div class="mb-4">
             <h4>Invite User</h4>
@@ -245,6 +277,8 @@ async function loadTeamsForOrg(orgId) {
 
     loadMembers(team.id);
   });
+
+  restoreOpenCollapseState(teamAccordion, openTeamIds);
 }
 
 // Function to show rename org modal

@@ -10,6 +10,26 @@ teamAdminTab.innerHTML = `
   <div class="accordion" id="teamAccordion"></div>
 `;
 
+// Preserve accordion open/closed state when rebuilding the DOM
+function getOpenCollapseIds(container) {
+  if (!container) return new Set();
+  return new Set(Array.from(container.querySelectorAll('.accordion-collapse.show')).map(el => el.id));
+}
+
+function restoreOpenCollapseState(container, openIds) {
+  if (!container || !openIds) return;
+  openIds.forEach(id => {
+    const collapseEl = container.querySelector(`#${id}`);
+    if (!collapseEl) return;
+    collapseEl.classList.add('show');
+    const trigger = container.querySelector(`[data-bs-target="#${id}"]`);
+    if (trigger) {
+      trigger.classList.remove('collapsed');
+      trigger.setAttribute('aria-expanded', 'true');
+    }
+  });
+}
+
 // Load my teams and build UI
 async function loadMyTeams() {
   const res = await api('/my-teams');
@@ -19,6 +39,8 @@ async function loadMyTeams() {
   }
   const teams = await res.json();
   const accordion = document.getElementById('teamAccordion');
+  if (!accordion) return;
+  const openCollapseIds = getOpenCollapseIds(accordion);
   accordion.innerHTML = '';
 
   if (!teams.length) {
@@ -29,15 +51,16 @@ async function loadMyTeams() {
   teams.forEach((team, index) => {
     const itemId = `team-${team.id}`;
     const collapseId = `collapse-${team.id}`;
+    const shouldExpand = openCollapseIds.has(collapseId) || (openCollapseIds.size === 0 && index === 0);
     const item = document.createElement('div');
     item.className = 'accordion-item';
     item.innerHTML = `
       <h2 class="accordion-header" id="${itemId}">
-        <button class="accordion-button ${index === 0 ? '' : 'collapsed'}" type="button" data-bs-toggle="collapse" data-bs-target="#${collapseId}" aria-expanded="${index === 0 ? 'true' : 'false'}" aria-controls="${collapseId}">
+        <button class="accordion-button ${shouldExpand ? '' : 'collapsed'}" type="button" data-bs-toggle="collapse" data-bs-target="#${collapseId}" aria-expanded="${shouldExpand ? 'true' : 'false'}" aria-controls="${collapseId}">
           ${team.name} (ID: ${team.id}) in ${team.org_name} (Org ID: ${team.org_id})
         </button>
       </h2>
-      <div id="${collapseId}" class="accordion-collapse collapse ${index === 0 ? 'show' : ''}" aria-labelledby="${itemId}" data-bs-parent="#teamAccordion">
+      <div id="${collapseId}" class="accordion-collapse collapse ${shouldExpand ? 'show' : ''}" aria-labelledby="${itemId}" data-bs-parent="#teamAccordion">
         <div class="accordion-body">
           <div class="mb-4">
             <h4>Invite User</h4>
@@ -104,6 +127,8 @@ async function loadMyTeams() {
 
     loadMembers(team.id);
   });
+
+  restoreOpenCollapseState(accordion, openCollapseIds);
 }
 
 // Load members for a specific team
