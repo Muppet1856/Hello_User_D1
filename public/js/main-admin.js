@@ -13,7 +13,7 @@ mainAdminTab.innerHTML = `
     <button class="btn btn-primary" id="create-org-btn">Create</button>
     <div id="create-org-message" class="mt-2"></div>
   </div>
-  <div class="accordion" id="orgAccordion"></div>
+  <div class="accordion" id="mainOrgAccordion"></div>
 `;
 
 // Attach create org handler
@@ -44,7 +44,7 @@ async function loadAllOrgs() {
     return;
   }
   const orgs = await res.json();
-  const accordion = document.getElementById('orgAccordion');
+  const accordion = document.getElementById('mainOrgAccordion');
   accordion.innerHTML = '';
 
   if (!orgs.length) {
@@ -53,8 +53,8 @@ async function loadAllOrgs() {
   }
 
   orgs.forEach((org) => {
-    const itemId = `org-${org.id}`;
-    const collapseId = `collapse-org-${org.id}`;
+    const itemId = `main-org-${org.id}`;
+    const collapseId = `main-collapse-org-${org.id}`;
     const item = document.createElement('div');
     item.className = 'accordion-item';
     item.innerHTML = `
@@ -71,7 +71,7 @@ async function loadAllOrgs() {
           </table>
         </button>
       </h2>
-      <div id="${collapseId}" class="accordion-collapse collapse" aria-labelledby="${itemId}" data-bs-parent="#orgAccordion">
+      <div id="${collapseId}" class="accordion-collapse collapse" aria-labelledby="${itemId}" data-bs-parent="#mainOrgAccordion">
         <div class="accordion-body">
           <div class="mb-4">
             <h4>Invite Org Admin</h4>
@@ -79,7 +79,7 @@ async function loadAllOrgs() {
             <button class="btn btn-secondary invite-org-admin-btn" data-org-id="${org.id}">Invite</button>
             <div id="invite-org-admin-message-${org.id}" class="mt-2"></div>
           </div>
-          <div class="accordion" id="teamAccordion-${org.id}"></div>
+          <div class="accordion" id="mainTeamAccordion-${org.id}"></div>
         </div>
       </div>
     `;
@@ -133,7 +133,7 @@ async function loadTeamsForOrg(orgId) {
     return;
   }
   const teams = await res.json();
-  const teamAccordion = document.getElementById(`teamAccordion-${orgId}`);
+  const teamAccordion = document.getElementById(`mainTeamAccordion-${orgId}`);
   teamAccordion.innerHTML = '';
 
   if (!teams.length) {

@@ -10,10 +10,24 @@ orgAdminTab.innerHTML = `
   <div class="accordion" id="orgAccordion"></div>
 `;
 
+async function getUserRoles() {
+  const res = await api('/me');
+  if (!res.ok) {
+    console.error('Failed to load user roles', res.status);
+    return [];
+  }
+  const user = await res.json();
+  return user.roles || [];
+}
+
+function isMainAdmin(roles) {
+  return roles.some(r => r.role === 'main_admin');
+}
+
 // Load my orgs and build UI
 async function loadMyOrgs() {
   console.log('Loading orgs for Org Admin tab...');
-  const userRoles = await getUserRoles(); // Assume a helper to get roles from /me or local storage
+  const userRoles = await getUserRoles();
   let endpoint = '/my-orgs';
   if (isMainAdmin(userRoles)) {
     endpoint = '/organizations'; // Use all orgs for main_admin
