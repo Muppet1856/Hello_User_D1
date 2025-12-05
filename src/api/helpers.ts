@@ -29,7 +29,7 @@ export function isTeamAdminForTeam(roles: any[], teamId: string) {
 }
 
 export async function authMiddleware(c: Context<{ Bindings: Bindings }>, next: () => Promise<void>) {
-  const path = c.req.path;
+  const path = c.req.path.replace(/^\/api/, '');
   if (path === '/login' || path === '/verify') {
     return await next();
   }

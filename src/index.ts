@@ -32,11 +32,11 @@ api.use('*', async (c, next) => {
   }
 });
 
-// Auth routes (no auth middleware needed for login/verify)
-api.route('/', auth);
-
-// Apply auth middleware to protected routes (after logging)
+// Apply auth middleware after logging; it skips login/verify but protects everything else (including /me)
 api.use('*', authMiddleware);
+
+// Auth routes
+api.route('/', auth);
 
 // Mount other routers
 api.route('/', orgs);
