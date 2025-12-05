@@ -106,14 +106,9 @@ async function loadTeamsForOrg(orgId) {
       <div id="${collapseId}" class="accordion-collapse collapse ${index === 0 ? 'show' : ''}" aria-labelledby="${itemId}" data-bs-parent="#teamAccordion-${orgId}">
         <div class="accordion-body">
           <div class="mb-3">
-            <h5>Rename Team</h5>
-            <input id="rename-team-${team.id}" class="form-control mb-2" placeholder="New Name" value="${team.name}">
-            <button class="btn btn-warning rename-btn" data-team-id="${team.id}">Rename</button>
-            <div id="rename-message-${team.id}" class="mt-2"></div>
-          </div>
-          <div class="mb-3">
-            <button class="btn btn-danger delete-btn" data-team-id="${team.id}">Delete Team</button>
-            <div id="delete-message-${team.id}" class="mt-2"></div>
+            <button class="btn btn-warning rename-btn" data-team-id="${team.id}" data-team-name="${team.name}">Rename</button>
+            <button class="btn btn-danger ms-2 delete-btn" data-team-id="${team.id}">Delete Team</button>
+            <div id="team-message-${team.id}" class="mt-2"></div>
           </div>
           <div class="mb-4">
             <h4>Invite User</h4>
@@ -156,39 +151,17 @@ async function loadTeamsForOrg(orgId) {
     `;
     teamAccordion.appendChild(item);
 
-    // Attach rename handler
-    item.querySelector('.rename-btn').addEventListener('click', async (e) => {
+    // Attach rename handler (opens modal)
+    item.querySelector('.rename-btn').addEventListener('click', (e) => {
       const teamId = e.target.dataset.teamId;
-      const name = document.getElementById(`rename-team-${teamId}`).value.trim();
-      if (!name) {
-        alert('Please enter a new name');
-        return;
-      }
-      const res = await api(`/teams/${teamId}`, {
-        method: 'PUT',
-        body: JSON.stringify({ name })
-      });
-      const msg = document.getElementById(`rename-message-${teamId}`);
-      if (res.ok) {
-        msg.innerHTML = '<div class="alert alert-success">Team renamed!</div>';
-        loadTeamsForOrg(orgId); // Refresh
-      } else {
-        msg.innerHTML = '<div class="alert alert-danger">Failed to rename team.</div>';
-      }
+      const currentName = e.target.dataset.teamName;
+      showRenameModal(teamId, currentName, orgId);
     });
 
-    // Attach delete handler
-    item.querySelector('.delete-btn').addEventListener('click', async (e) => {
+    // Attach delete handler (opens modal)
+    item.querySelector('.delete-btn').addEventListener('click', (e) => {
       const teamId = e.target.dataset.teamId;
-      if (!confirm('Delete this team?')) return;
-      const res = await api(`/teams/${teamId}`, { method: 'DELETE' });
-      const msg = document.getElementById(`delete-message-${teamId}`);
-      if (res.ok) {
-        msg.innerHTML = '<div class="alert alert-success">Team deleted!</div>';
-        loadTeamsForOrg(orgId); // Refresh
-      } else {
-        msg.innerHTML = '<div class="alert alert-danger">Failed to delete team.</div>';
-      }
+      showDeleteModal(teamId, orgId);
     });
 
     // Attach invite handler
@@ -213,7 +186,7 @@ async function loadTeamsForOrg(orgId) {
       const msg = document.getElementById(`invite-message-${teamId}`);
       if (res.ok) {
         msg.innerHTML = '<div class="alert alert-success">Invitation sent!</div>';
-        loadMembers(teamId); // Refresh members
+        loadMembers(teamId);
       } else {
         msg.innerHTML = '<div class="alert alert-danger">Failed to send invitation.</div>';
       }
@@ -223,7 +196,110 @@ async function loadTeamsForOrg(orgId) {
   });
 }
 
-// Load members for a specific team (same as in team-admin.js, but with re-assign)
+// Function to show rename modal
+function showRenameModal(teamId, currentName, orgId) {
+  const modalId = `renameModal-${teamId}`;
+  const modal = document.createElement('div');
+  modal.className = 'modal fade';
+  modal.id = modalId;
+  modal.innerHTML = `
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Rename Team</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <form>
+            <div class="mb-3">
+              <label for="new-team-name-${teamId}" class="form-label">New Team Name</label>
+              <input type="text" class="form-control" id="new-team-name-${teamId}" value="${currentName}">
+            </div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-primary confirm-rename-btn">OK</button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+
+  const bsModal = new bootstrap.Modal(modal);
+  bsModal.show();
+
+  // Attach confirm rename handler
+  modal.querySelector('.confirm-rename-btn').addEventListener('click', async () => {
+    const name = document.getElementById(`new-team-name-${teamId}`).value.trim();
+    if (!name) {
+      alert('Please enter a new name');
+      return;
+    }
+    const res = await api(`/teams/${teamId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ name })
+    });
+    const msg = document.getElementById(`team-message-${teamId}`);
+    if (res.ok) {
+      msg.innerHTML = '<div class="alert alert-success">Team renamed!</div>';
+      loadTeamsForOrg(orgId); // Refresh
+    } else {
+      msg.innerHTML = '<div class="alert alert-danger">Failed to rename team.</div>';
+    }
+    bsModal.hide();
+  });
+
+  // Clean up modal after hide
+  modal.addEventListener('hidden.bs.modal', () => modal.remove());
+}
+
+// Function to show delete confirm modal
+function showDeleteModal(teamId, orgId) {
+  const modalId = `deleteModal-${teamId}`;
+  const modal = document.createElement('div');
+  modal.className = 'modal fade';
+  modal.id = modalId;
+  modal.innerHTML = `
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Confirm Delete</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p>Are you sure you want to delete this team? This action cannot be undone.</p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">No</button>
+          <button type="button" class="btn btn-danger confirm-delete-btn">Yes</button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+
+  const bsModal = new bootstrap.Modal(modal);
+  bsModal.show();
+
+  // Attach confirm delete handler
+  modal.querySelector('.confirm-delete-btn').addEventListener('click', async () => {
+    const res = await api(`/teams/${teamId}`, { method: 'DELETE' });
+    const msg = document.getElementById(`team-message-${teamId}`);
+    if (res.ok) {
+      msg.innerHTML = '<div class="alert alert-success">Team deleted!</div>';
+      loadTeamsForOrg(orgId); // Refresh
+    } else {
+      msg.innerHTML = '<div class="alert alert-danger">Failed to delete team.</div>';
+    }
+    bsModal.hide();
+  });
+
+  // Clean up modal after hide
+  modal.addEventListener('hidden.bs.modal', () => modal.remove());
+}
+
+// Load members for a specific team (same as before)
 async function loadMembers(teamId) {
   const res = await api(`/teams/${teamId}/members`);
   if (!res.ok) {
@@ -232,7 +308,6 @@ async function loadMembers(teamId) {
   }
   let members = await res.json();
 
-  // Sort members: team_admin first, then statistician, member, guest
   const rolePriority = {
     'team_admin': 0,
     'statistician': 1,
