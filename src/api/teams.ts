@@ -139,6 +139,86 @@ teams.post('/teams/:teamId/invite', async (c) => {
   return c.json({ success: true });
 });
 
+// List members for a team
+teams.get('/teams/:teamId/members', async (c) => {
+  const teamId = c.req.param('teamId');
+  const userRoles = c.get('userRoles');
+  if (!isTeamAdminForTeam(userRoles, teamId)) {
+    return c.json({ error: 'Forbidden' }, 403);
+  }
+
+  const { results } = await c.env.DB.prepare(`
+    SELECT ur.user_id, ur.role, u.name, u.email 
+    FROM user_roles ur 
+    JOIN users u ON ur.user_id = u.id 
+    WHERE ur.team_id = ? AND ur.role IN ('team_admin', 'statistician', 'member', 'guest')
+  `).bind(teamId).all();
+  return c.json(results);
+});
+
+// Re-assign role for a user in a team
+teams.put('/teams/:teamId/members/:userId', async (c) => {
+  const teamId = c.req.param('teamId');
+  const userId = c.req.param('userId');
+  const userRoles = c.get('userRoles');
+  if (!isTeamAdminForTeam(userRoles, teamId)) {
+    return c.json({ error: 'Forbidden' }, 403);
+  }
+
+  const team = await c.env.DB.prepare('SELECT org_id FROM teams WHERE id = ?').bind(teamId).first();
+  if (!team) {
+    return c.json({ error: 'Team not found' }, 404);
+  }
+
+  const currentRoleRow = await c.env.DB.prepare('SELECT role FROM user_roles WHERE user_id = ? AND team_id = ?').bind(userId, teamId).first();
+  if (!currentRoleRow) {
+    return c.json({ error: 'User not in team' }, 404);
+  }
+
+  const body = await c.req.json();
+  const { role: newRole } = z.object({ role: z.enum(['statistician', 'member', 'guest']) }).parse(body);
+
+  if (currentRoleRow.role === newRole) {
+    return c.json({ success: true });
+  }
+
+  // Delete old role
+  await c.env.DB.prepare('DELETE FROM user_roles WHERE user_id = ? AND team_id = ? AND role = ?').bind(userId, teamId, currentRoleRow.role).run();
+
+  // Insert new role
+  await c.env.DB.prepare('INSERT INTO user_roles (user_id, role, org_id, team_id) VALUES (?, ?, ?, ?)').bind(userId, newRole, team.org_id, teamId).run();
+
+  return c.json({ success: true });
+});
+
+// Remove user from a team (and potentially delete user)
+teams.delete('/teams/:teamId/members/:userId', async (c) => {
+  const teamId = c.req.param('teamId');
+  const userId = c.req.param('userId');
+  const userRoles = c.get('userRoles');
+  if (!isTeamAdminForTeam(userRoles, teamId)) {
+    return c.json({ error: 'Forbidden' }, 403);
+  }
+
+  const roleRow = await c.env.DB.prepare('SELECT role FROM user_roles WHERE user_id = ? AND team_id = ?').bind(userId, teamId).first();
+  if (!roleRow) {
+    return c.json({ error: 'User not in team' }, 404);
+  }
+
+  // Delete the role
+  await c.env.DB.prepare('DELETE FROM user_roles WHERE user_id = ? AND team_id = ? AND role = ?').bind(userId, teamId, roleRow.role).run();
+
+  // Check if user should be deleted
+  const { results: remainingRoles } = await c.env.DB.prepare('SELECT role, team_id FROM user_roles WHERE user_id = ?').bind(userId).all();
+  const hasTeamAssociation = remainingRoles.some(r => r.team_id !== null);
+  const isOrgOrMainAdmin = remainingRoles.some(r => r.role === 'org_admin' || r.role === 'main_admin');
+  if (!hasTeamAssociation && !isOrgOrMainAdmin) {
+    await c.env.DB.prepare('DELETE FROM users WHERE id = ?').bind(userId).run();
+  }
+
+  return c.json({ success: true });
+});
+
 // Rename team (PUT)
 teams.put('/teams/:teamId', async (c) => {
   const teamId = c.req.param('teamId');
