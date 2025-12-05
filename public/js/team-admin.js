@@ -1,3 +1,4 @@
+// src/js/team-admin.js
 import { api } from './app.js';
 
 // This file handles Team Admin tab population and logic
@@ -39,27 +40,23 @@ async function loadMyTeams() {
       <div id="${collapseId}" class="accordion-collapse collapse ${index === 0 ? 'show' : ''}" aria-labelledby="${itemId}" data-bs-parent="#teamAccordion">
         <div class="accordion-body">
           <div class="mb-4">
-            <h4>Invite Users</h4>
+            <h4>Invite User</h4>
             <div class="row mb-3">
-              <div class="col-md-4">
-                <h5>Statistician</h5>
-                <input id="invite-stat-email-${team.id}" class="form-control mb-2" placeholder="Email" type="email">
-                <button class="btn btn-secondary invite-btn" data-team-id="${team.id}" data-role="statistician">Invite</button>
-                <div id="invite-stat-message-${team.id}" class="mt-2"></div>
+              <div class="col-md-6">
+                <input id="invite-email-${team.id}" class="form-control mb-2" placeholder="Email" type="email">
               </div>
               <div class="col-md-4">
-                <h5>Member</h5>
-                <input id="invite-member-email-${team.id}" class="form-control mb-2" placeholder="Email" type="email">
-                <button class="btn btn-secondary invite-btn" data-team-id="${team.id}" data-role="member">Invite</button>
-                <div id="invite-member-message-${team.id}" class="mt-2"></div>
+                <select id="invite-role-${team.id}" class="form-select mb-2">
+                  <option value="statistician">Statistician</option>
+                  <option value="member">Member</option>
+                  <option value="guest">Guest</option>
+                </select>
               </div>
-              <div class="col-md-4">
-                <h5>Guest</h5>
-                <input id="invite-guest-email-${team.id}" class="form-control mb-2" placeholder="Email" type="email">
-                <button class="btn btn-secondary invite-btn" data-team-id="${team.id}" data-role="guest">Invite</button>
-                <div id="invite-guest-message-${team.id}" class="mt-2"></div>
+              <div class="col-md-2">
+                <button class="btn btn-secondary invite-btn" data-team-id="${team.id}">Invite</button>
               </div>
             </div>
+            <div id="invite-message-${team.id}" class="mt-2"></div>
           </div>
           <div class="mb-4">
             <h4>Existing Members</h4>
@@ -82,28 +79,27 @@ async function loadMyTeams() {
     `;
     accordion.appendChild(item);
 
-    // Attach invite handlers
-    item.querySelectorAll('.invite-btn').forEach(btn => {
-      btn.addEventListener('click', async (e) => {
-        const teamId = e.target.dataset.teamId;
-        const role = e.target.dataset.role;
-        const email = document.getElementById(`invite-${role}-email-${teamId}`).value.trim();
-        if (!email) {
-          alert('Please enter an email');
-          return;
-        }
-        const res = await api(`/teams/${teamId}/invite`, {
-          method: 'POST',
-          body: JSON.stringify({ email, role })
-        });
-        const msg = document.getElementById(`invite-${role}-message-${teamId}`);
-        if (res.ok) {
-          msg.innerHTML = '<div class="alert alert-success">Invitation sent!</div>';
-          loadMembers(teamId); // Refresh members after invite (in case immediate add, but typically after acceptance)
-        } else {
-          msg.innerHTML = '<div class="alert alert-danger">Failed to send invitation.</div>';
-        }
+    // Attach invite handler
+    const inviteBtn = item.querySelector('.invite-btn');
+    inviteBtn.addEventListener('click', async (e) => {
+      const teamId = e.target.dataset.teamId;
+      const email = document.getElementById(`invite-email-${teamId}`).value.trim();
+      const role = document.getElementById(`invite-role-${teamId}`).value;
+      if (!email) {
+        alert('Please enter an email');
+        return;
+      }
+      const res = await api(`/teams/${teamId}/invite`, {
+        method: 'POST',
+        body: JSON.stringify({ email, role })
       });
+      const msg = document.getElementById(`invite-message-${teamId}`);
+      if (res.ok) {
+        msg.innerHTML = '<div class="alert alert-success">Invitation sent!</div>';
+        loadMembers(teamId); // Refresh members after invite (in case immediate add, but typically after acceptance)
+      } else {
+        msg.innerHTML = '<div class="alert alert-danger">Failed to send invitation.</div>';
+      }
     });
 
     loadMembers(team.id);
@@ -144,8 +140,6 @@ async function loadMembers(teamId) {
       </td>
     `;
     memberTableBody.appendChild(row);
-
-    // Attach message div below the row if needed (but since table, we can append a td for messages if errors occur)
   });
 
   // Attach remove handlers
