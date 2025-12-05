@@ -77,6 +77,11 @@ teams.post('/teams/:teamId/invite-admin', async (c) => {
     c.env.JWT_SECRET
   );
 
+  const expiresAt = new Date((Math.floor(Date.now() / 1000) + 3600 * 24) * 1000).toISOString();
+  await c.env.DB.prepare(
+    'INSERT INTO invitations (id, token, email, role, org_id, team_id, expires_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+  ).bind(crypto.randomUUID(), token, email, 'team_admin', team.org_id, teamId, expiresAt, createdBy).run();
+
   const inviteUrl = `https://grok-hello-user.zellen.workers.dev/?token=${token}`;
 
   const resend = new Resend(c.env.RESEND_API_KEY);
@@ -115,6 +120,11 @@ teams.post('/teams/:teamId/invite', async (c) => {
     { email, type: 'invite', role, org_id: team.org_id, team_id: teamId, created_by: createdBy, exp: Math.floor(Date.now() / 1000) + 3600 * 24 }, // 24-hour expiry
     c.env.JWT_SECRET
   );
+
+  const expiresAt = new Date((Math.floor(Date.now() / 1000) + 3600 * 24) * 1000).toISOString();
+  await c.env.DB.prepare(
+    'INSERT INTO invitations (id, token, email, role, org_id, team_id, expires_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+  ).bind(crypto.randomUUID(), token, email, role, team.org_id, teamId, expiresAt, createdBy).run();
 
   const inviteUrl = `https://grok-hello-user.zellen.workers.dev/?token=${token}`;
 

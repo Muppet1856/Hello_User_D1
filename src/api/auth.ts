@@ -17,10 +17,22 @@ auth.post('/login', async (c) => {
   const body = await c.req.json();
   const { email } = z.object({ email: z.string().email() }).parse(body);
 
+  let user = await c.env.DB.prepare('SELECT * FROM users WHERE email = ?').bind(email).first();
+  if (!user) {
+    const userId = crypto.randomUUID();
+    await c.env.DB.prepare('INSERT INTO users (id, email, verified, invited_by) VALUES (?, ?, FALSE, ?)').bind(userId, email, userId).run();
+    user = { id: userId, email } as typeof user;
+  }
+
   const token = await jwt.sign(
-    { email, type: 'login', exp: Math.floor(Date.now() / 1000) + 3600 },
+    { email, type: 'login', role: 'login', exp: Math.floor(Date.now() / 1000) + 3600 },
     c.env.JWT_SECRET
   );
+
+  const expiresAt = new Date((Math.floor(Date.now() / 1000) + 3600) * 1000).toISOString();
+  await c.env.DB.prepare(
+    'INSERT INTO invitations (id, token, email, role, org_id, team_id, expires_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+  ).bind(crypto.randomUUID(), token, email, 'login', null, null, expiresAt, user!.id).run();
 
   const loginUrl = `https://grok-hello-user.zellen.workers.dev/?token=${token}`;
 
@@ -41,6 +53,16 @@ auth.get('/verify', async (c) => {
     return c.json({ error: 'Missing token' }, 400);
   }
 
+  const invitation = await c.env.DB.prepare('SELECT * FROM invitations WHERE token = ?').bind(token).first();
+  if (!invitation) {
+    return c.json({ error: 'Invalid/expired token' }, 401);
+  }
+
+  if (new Date(invitation.expires_at).getTime() < Date.now()) {
+    await c.env.DB.prepare('DELETE FROM invitations WHERE token = ?').bind(token).run();
+    return c.json({ error: 'Invalid/expired token' }, 401);
+  }
+
   let payload;
   try {
     if (!await jwt.verify(token, c.env.JWT_SECRET)) {
@@ -48,12 +70,18 @@ auth.get('/verify', async (c) => {
     }
     payload = jwt.decode(token).payload;
   } catch (err) {
+    await c.env.DB.prepare('DELETE FROM invitations WHERE token = ?').bind(token).run();
+    return c.json({ error: 'Invalid/expired token' }, 401);
+  }
+
+  if (payload.email !== invitation.email || (payload.role && payload.role !== invitation.role)) {
+    await c.env.DB.prepare('DELETE FROM invitations WHERE token = ?').bind(token).run();
     return c.json({ error: 'Invalid/expired token' }, 401);
   }
 
   let user = await c.env.DB.prepare('SELECT * FROM users WHERE email = ?').bind(payload.email).first();
 
-  let invitedBy = payload.created_by;  // From invitation token
+  let invitedBy = invitation.created_by;  // From invitation token
   if (!user) {
     const userId = crypto.randomUUID();
     invitedBy = invitedBy || userId;  // Self-invited if no inviter
@@ -64,16 +92,18 @@ auth.get('/verify', async (c) => {
   }
 
   // If invitation, assign role
-  if (payload.role) {
+  if (invitation.role && invitation.role !== 'login') {
     await c.env.DB.prepare(
       'INSERT OR IGNORE INTO user_roles (user_id, role, org_id, team_id) VALUES (?, ?, ?, ?)'
-    ).bind(user.id, payload.role, payload.org_id || null, payload.team_id || null).run();
+    ).bind(user.id, invitation.role, invitation.org_id || null, invitation.team_id || null).run();
   }
 
   const sessionToken = await jwt.sign(
     { id: user.id, exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30 },
     c.env.JWT_SECRET
   );
+
+  await c.env.DB.prepare('DELETE FROM invitations WHERE token = ?').bind(token).run();
   return c.json({ token: sessionToken });
 });
 

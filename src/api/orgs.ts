@@ -61,6 +61,11 @@ orgs.post('/organizations/:orgId/invite-admin', async (c) => {
     c.env.JWT_SECRET
   );
 
+  const expiresAt = new Date((Math.floor(Date.now() / 1000) + 3600 * 24) * 1000).toISOString();
+  await c.env.DB.prepare(
+    'INSERT INTO invitations (id, token, email, role, org_id, team_id, expires_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+  ).bind(crypto.randomUUID(), token, email, 'org_admin', orgId, null, expiresAt, createdBy).run();
+
   const inviteUrl = `https://grok-hello-user.zellen.workers.dev/?token=${token}`;
 
   const resend = new Resend(c.env.RESEND_API_KEY);
