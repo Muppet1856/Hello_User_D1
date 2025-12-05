@@ -99,10 +99,16 @@ async function loadTeamsForOrg(orgId) {
     item.className = 'accordion-item';
     item.innerHTML = `
       <h2 class="accordion-header" id="${itemId}">
-        <button class="accordion-button d-flex align-items-center ${index === 0 ? '' : 'collapsed'}" type="button" data-bs-toggle="collapse" data-bs-target="#${collapseId}" aria-expanded="${index === 0 ? 'true' : 'false'}" aria-controls="${collapseId}">
-          <span class="me-auto">${team.name} (ID: ${team.id})</span>
-          <button class="btn btn-warning btn-sm rename-btn me-1" data-team-id="${team.id}" data-team-name="${team.name}">Rename</button>
-          <button class="btn btn-danger btn-sm delete-btn" data-team-id="${team.id}">Delete</button>
+        <button class="accordion-button ${index === 0 ? '' : 'collapsed'}" type="button" data-bs-toggle="collapse" data-bs-target="#${collapseId}" aria-expanded="${index === 0 ? 'true' : 'false'}" aria-controls="${collapseId}">
+          <table class="w-100">
+            <tr>
+              <td>${team.name} (ID: ${team.id})</td>
+              <td class="text-end">
+                <button class="btn btn-warning btn-sm rename-btn me-1" data-team-id="${team.id}" data-team-name="${team.name}">Rename</button>
+                <button class="btn btn-danger btn-sm delete-btn" data-team-id="${team.id}">Delete</button>
+              </td>
+            </tr>
+          </table>
         </button>
       </h2>
       <div id="${collapseId}" class="accordion-collapse collapse ${index === 0 ? 'show' : ''}" aria-labelledby="${itemId}" data-bs-parent="#teamAccordion-${orgId}">
