@@ -262,12 +262,8 @@ jobs:
       - name: Apply Migrations
         if: steps.cfg.outputs.type != 'skip'
         run: |
-          set -euo pipefail
-
-          shopt -s nullglob
-          for f in migrations/*.sql; do
-            npx wrangler d1 execute "$DB_NAME" --file="$f" --remote || exit 1
-          done
+          FINAL_NAME="${{ env.FINAL_WORKER_NAME }}"
+          npx wrangler d1 migrations apply $FINAL_NAME
 
       # ————————————————————————
       # Load env vars from .cloudflare/vars.json → wrangler.toml
