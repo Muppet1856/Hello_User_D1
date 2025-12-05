@@ -74,6 +74,41 @@ orgs.post('/organizations/:orgId/invite-admin', async (c) => {
   return c.json({ success: true });
 });
 
+// Rename organization (PUT)
+orgs.put('/organizations/:orgId', async (c) => {
+  const userRoles = c.get('userRoles');
+  if (!isMainAdmin(userRoles)) {
+    return c.json({ error: 'Forbidden' }, 403);
+  }
+
+  const orgId = c.req.param('orgId');
+  const body = await c.req.json();
+  const { name } = z.object({ name: z.string().min(1) }).parse(body);
+
+  const result = await c.env.DB.prepare('UPDATE organizations SET name = ? WHERE id = ?').bind(name, orgId).run();
+  if (result.meta.changes === 0) {
+    return c.json({ error: 'Organization not found' }, 404);
+  }
+
+  return c.json({ success: true });
+});
+
+// Delete organization (DELETE)
+orgs.delete('/organizations/:orgId', async (c) => {
+  const userRoles = c.get('userRoles');
+  if (!isMainAdmin(userRoles)) {
+    return c.json({ error: 'Forbidden' }, 403);
+  }
+
+  const orgId = c.req.param('orgId');
+  const result = await c.env.DB.prepare('DELETE FROM organizations WHERE id = ?').bind(orgId).run();
+  if (result.meta.changes === 0) {
+    return c.json({ error: 'Organization not found' }, 404);
+  }
+
+  return c.json({ success: true });
+});
+
 orgs.get('/my-orgs', async (c) => {
   const userRoles = c.get('userRoles');
   if (isMainAdmin(userRoles)) {

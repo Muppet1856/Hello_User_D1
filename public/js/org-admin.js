@@ -65,7 +65,8 @@ async function loadMyOrgs() {
     // Attach create handler
     item.querySelector('.create-team-btn').addEventListener('click', async (e) => {
       const orgId = e.target.dataset.orgId;
-      const name = document.getElementById(`new-team-name-${orgId}`).value.trim();
+      const nameInput = document.getElementById(`new-team-name-${orgId}`);
+      const name = nameInput.value.trim();
       if (!name) {
         alert('Please enter a name');
         return;
@@ -77,6 +78,7 @@ async function loadMyOrgs() {
       const msg = document.getElementById(`create-team-message-${orgId}`);
       if (res.ok) {
         msg.innerHTML = '<div class="alert alert-success">Team created!</div>';
+        nameInput.value = ''; // Clear the form
         loadTeams(orgId); // Refresh list
       } else {
         msg.innerHTML = '<div class="alert alert-danger">Failed to create team.</div>';
@@ -100,18 +102,63 @@ async function loadTeams(orgId) {
     li.className = 'list-group-item';
     li.innerHTML = `
       <div class="d-flex justify-content-between align-items-center">
-        <span>${team.name} (ID: ${team.id})</span>
+        <span id="team-name-${team.id}">${team.name} (ID: ${team.id})</span>
         <div>
+          <input class="form-control d-inline-block w-auto me-2" id="rename-team-${team.id}" placeholder="New Name" type="text">
+          <button class="btn btn-warning rename-team-btn me-2" data-team-id="${team.id}">Rename</button>
+          <button class="btn btn-danger delete-team-btn me-2" data-team-id="${team.id}">Delete</button>
           <input class="form-control d-inline-block w-auto me-2" id="invite-email-${team.id}" placeholder="Email to invite" type="email">
           <button class="btn btn-secondary invite-team-btn" data-team-id="${team.id}">Invite as Team Admin</button>
         </div>
       </div>
+      <div id="team-message-${team.id}" class="mt-2"></div>
       <div id="invite-message-${team.id}" class="mt-2"></div>
     `;
     teamList.appendChild(li);
   });
 
-  // Attach invite handlers
+  // Attach rename handlers
+  document.querySelectorAll(`#team-list-${orgId} .rename-team-btn`).forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      const teamId = e.target.dataset.teamId;
+      const newName = document.getElementById(`rename-team-${teamId}`).value.trim();
+      if (!newName) {
+        alert('Please enter a new name');
+        return;
+      }
+      if (!confirm(`Rename team to ${newName}?`)) return;
+      const res = await api(`/teams/${teamId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ name: newName })
+      });
+      const msg = document.getElementById(`team-message-${teamId}`);
+      if (res.ok) {
+        msg.innerHTML = '<div class="alert alert-success">Team renamed!</div>';
+        document.getElementById(`team-name-${teamId}`).textContent = `${newName} (ID: ${teamId})`;
+        document.getElementById(`rename-team-${teamId}`).value = ''; // Clear input
+      } else {
+        msg.innerHTML = '<div class="alert alert-danger">Failed to rename team.</div>';
+      }
+    });
+  });
+
+  // Attach delete handlers
+  document.querySelectorAll(`#team-list-${orgId} .delete-team-btn`).forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      const teamId = e.target.dataset.teamId;
+      if (!confirm('Delete this team? This will also delete related roles.')) return;
+      const res = await api(`/teams/${teamId}`, { method: 'DELETE' });
+      const msg = document.getElementById(`team-message-${teamId}`);
+      if (res.ok) {
+        msg.innerHTML = '<div class="alert alert-success">Team deleted!</div>';
+        loadTeams(orgId); // Refresh list
+      } else {
+        msg.innerHTML = '<div class="alert alert-danger">Failed to delete team.</div>';
+      }
+    });
+  });
+
+  // Attach invite handlers (unchanged)
   document.querySelectorAll(`#team-list-${orgId} .invite-team-btn`).forEach(btn => {
     btn.addEventListener('click', async (e) => {
       const teamId = e.target.dataset.teamId;

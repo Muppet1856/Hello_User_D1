@@ -129,4 +129,51 @@ teams.post('/teams/:teamId/invite', async (c) => {
   return c.json({ success: true });
 });
 
+// Rename team (PUT)
+teams.put('/teams/:teamId', async (c) => {
+  const teamId = c.req.param('teamId');
+  const userRoles = c.get('userRoles');
+
+  const team = await c.env.DB.prepare('SELECT org_id FROM teams WHERE id = ?').bind(teamId).first();
+  if (!team) {
+    return c.json({ error: 'Team not found' }, 404);
+  }
+
+  if (!isOrgAdminForOrg(userRoles, team.org_id)) {
+    return c.json({ error: 'Forbidden' }, 403);
+  }
+
+  const body = await c.req.json();
+  const { name } = z.object({ name: z.string().min(1) }).parse(body);
+
+  const result = await c.env.DB.prepare('UPDATE teams SET name = ? WHERE id = ?').bind(name, teamId).run();
+  if (result.meta.changes === 0) {
+    return c.json({ error: 'Team not found' }, 404);
+  }
+
+  return c.json({ success: true });
+});
+
+// Delete team (DELETE)
+teams.delete('/teams/:teamId', async (c) => {
+  const teamId = c.req.param('teamId');
+  const userRoles = c.get('userRoles');
+
+  const team = await c.env.DB.prepare('SELECT org_id FROM teams WHERE id = ?').bind(teamId).first();
+  if (!team) {
+    return c.json({ error: 'Team not found' }, 404);
+  }
+
+  if (!isOrgAdminForOrg(userRoles, team.org_id)) {
+    return c.json({ error: 'Forbidden' }, 403);
+  }
+
+  const result = await c.env.DB.prepare('DELETE FROM teams WHERE id = ?').bind(teamId).run();
+  if (result.meta.changes === 0) {
+    return c.json({ error: 'Team not found' }, 404);
+  }
+
+  return c.json({ success: true });
+});
+
 export default teams;
