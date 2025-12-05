@@ -100,16 +100,15 @@ async function loadTeamsForOrg(orgId) {
     item.innerHTML = `
       <h2 class="accordion-header" id="${itemId}">
         <button class="accordion-button ${index === 0 ? '' : 'collapsed'}" type="button" data-bs-toggle="collapse" data-bs-target="#${collapseId}" aria-expanded="${index === 0 ? 'true' : 'false'}" aria-controls="${collapseId}">
-          ${team.name} (ID: ${team.id})
+          <span>${team.name} (ID: ${team.id})</span>
+          <span class="ms-auto">
+            <button class="btn btn-warning btn-sm rename-btn me-1" data-team-id="${team.id}" data-team-name="${team.name}">Rename</button>
+            <button class="btn btn-danger btn-sm delete-btn" data-team-id="${team.id}">Delete</button>
+          </span>
         </button>
       </h2>
       <div id="${collapseId}" class="accordion-collapse collapse ${index === 0 ? 'show' : ''}" aria-labelledby="${itemId}" data-bs-parent="#teamAccordion-${orgId}">
         <div class="accordion-body">
-          <div class="mb-3">
-            <button class="btn btn-warning rename-btn" data-team-id="${team.id}" data-team-name="${team.name}">Rename</button>
-            <button class="btn btn-danger ms-2 delete-btn" data-team-id="${team.id}">Delete Team</button>
-            <div id="team-message-${team.id}" class="mt-2"></div>
-          </div>
           <div class="mb-4">
             <h4>Invite User</h4>
             <div class="row mb-3">
@@ -153,6 +152,7 @@ async function loadTeamsForOrg(orgId) {
 
     // Attach rename handler (opens modal)
     item.querySelector('.rename-btn').addEventListener('click', (e) => {
+      e.stopPropagation(); // Prevent triggering collapse
       const teamId = e.target.dataset.teamId;
       const currentName = e.target.dataset.teamName;
       showRenameModal(teamId, currentName, orgId);
@@ -160,6 +160,7 @@ async function loadTeamsForOrg(orgId) {
 
     // Attach delete handler (opens modal)
     item.querySelector('.delete-btn').addEventListener('click', (e) => {
+      e.stopPropagation(); // Prevent triggering collapse
       const teamId = e.target.dataset.teamId;
       showDeleteModal(teamId, orgId);
     });
@@ -240,12 +241,11 @@ function showRenameModal(teamId, currentName, orgId) {
       method: 'PUT',
       body: JSON.stringify({ name })
     });
-    const msg = document.getElementById(`team-message-${teamId}`);
     if (res.ok) {
-      msg.innerHTML = '<div class="alert alert-success">Team renamed!</div>';
+      alert('Team renamed!');
       loadTeamsForOrg(orgId); // Refresh
     } else {
-      msg.innerHTML = '<div class="alert alert-danger">Failed to rename team.</div>';
+      alert('Failed to rename team.');
     }
     bsModal.hide();
   });
@@ -285,12 +285,11 @@ function showDeleteModal(teamId, orgId) {
   // Attach confirm delete handler
   modal.querySelector('.confirm-delete-btn').addEventListener('click', async () => {
     const res = await api(`/teams/${teamId}`, { method: 'DELETE' });
-    const msg = document.getElementById(`team-message-${teamId}`);
     if (res.ok) {
-      msg.innerHTML = '<div class="alert alert-success">Team deleted!</div>';
+      alert('Team deleted!');
       loadTeamsForOrg(orgId); // Refresh
     } else {
-      msg.innerHTML = '<div class="alert alert-danger">Failed to delete team.</div>';
+      alert('Failed to delete team.');
     }
     bsModal.hide();
   });
