@@ -15,6 +15,10 @@ const orgs = new Hono<{ Bindings: Bindings }>();
 
 orgs.get('/my-orgs', async (c) => {
   const userRoles = c.get('userRoles');
+  if (isMainAdmin(userRoles)) {
+    const { results } = await c.env.DB.prepare('SELECT id, name FROM organizations').all();
+    return c.json(results);
+  }
   const orgIds = userRoles.filter(r => r.role === 'org_admin').map(r => r.org_id);
   if (!orgIds.length) return c.json([]);
 

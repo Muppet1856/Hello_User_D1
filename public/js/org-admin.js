@@ -12,11 +12,16 @@ orgAdminTab.innerHTML = `
 
 // Load my orgs and build UI
 async function loadMyOrgs() {
-  console.log('Loading orgs...');
-  const res = await api('/my-orgs');
+  console.log('Loading orgs for Org Admin tab...');
+  const userRoles = await getUserRoles(); // Assume a helper to get roles from /me or local storage
+  let endpoint = '/my-orgs';
+  if (isMainAdmin(userRoles)) {
+    endpoint = '/organizations'; // Use all orgs for main_admin
+  }
+  const res = await api(endpoint);
   if (!res.ok) {
     console.error('Failed to load orgs:', res.status);
-    alert('Failed to load your organizations');
+    alert('Failed to load organizations');
     return;
   }
   const orgs = await res.json();
