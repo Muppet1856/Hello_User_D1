@@ -70,7 +70,10 @@ auth.get('/verify', async (c) => {
     ).bind(user.id, payload.role, payload.org_id || null, payload.team_id || null).run();
   }
 
-  const sessionToken = await jwt.sign({ id: user.id }, c.env.JWT_SECRET, { expiresIn: '30d' });
+  const sessionToken = await jwt.sign(
+    { id: user.id, exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30 },
+    c.env.JWT_SECRET
+  );
   return c.json({ token: sessionToken });
 });
 
