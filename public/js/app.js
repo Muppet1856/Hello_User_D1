@@ -58,37 +58,39 @@ async function loadDashboard() {
   const res = await api('/me');
   if (!res.ok) {
     localStorage.removeItem('token');
-    document.getElementById('login-form').classList.remove('invisible');
-    document.getElementById('dashboard').classList.add('invisible');
+    document.getElementById('loading').classList.add('d-none');
+    document.getElementById('login-form').classList.remove('d-none');
+    document.getElementById('dashboard').classList.add('d-none');
     return;
   }
 
   const user = await res.json();
 
-  document.getElementById('login-form').classList.add('invisible');
-  document.getElementById('dashboard').classList.remove('invisible');
+  document.getElementById('login-form').classList.add('d-none');
+  document.getElementById('loading').classList.add('d-none');
+  document.getElementById('dashboard').classList.remove('d-none');
 
   const roles = user.roles || [];
   const isMain = roles.some(r => r.role === 'main_admin');
 
   if (isMain) {
-    document.getElementById('main-admin-nav').classList.remove('invisible');
+    document.getElementById('main-admin-nav').classList.remove('d-none');
     const { initMainAdmin } = await import('./main-admin.js');
     initMainAdmin();
   }
   if (roles.some(r => r.role === 'org_admin') || isMain) {
-    document.getElementById('org-admin-nav').classList.remove('invisible');
+    document.getElementById('org-admin-nav').classList.remove('d-none');
     const { initOrgAdmin } = await import('./org-admin.js');
     initOrgAdmin();
   }
   if (roles.some(r => r.role === 'team_admin') || isMain) {
-    document.getElementById('team-admin-nav').classList.remove('invisible');
+    document.getElementById('team-admin-nav').classList.remove('d-none');
     const { initTeamAdmin } = await import('./team-admin.js');
     initTeamAdmin();
   }
 
   // Activate the first visible tab
-  const firstVisibleTab = document.querySelector('.nav-link:not(.invisible)');
+  const firstVisibleTab = document.querySelector('.nav-link:not(.d-none)');
   if (firstVisibleTab) {
     new bootstrap.Tab(firstVisibleTab).show();
   }
@@ -96,5 +98,7 @@ async function loadDashboard() {
 
 // Auto-load dashboard if already logged in
 if (localStorage.getItem('token')) {
+  document.getElementById('login-form').classList.add('d-none');
+  document.getElementById('loading').classList.remove('d-none');
   loadDashboard();
 }
