@@ -26,18 +26,18 @@ async function loadMyOrgs() {
     return;
   }
 
-  orgs.forEach((org, index) => {
+  orgs.forEach((org) => {
     const itemId = `org-${org.id}`;
     const collapseId = `collapse-org-${org.id}`;
     const item = document.createElement('div');
     item.className = 'accordion-item';
     item.innerHTML = `
       <h2 class="accordion-header" id="${itemId}">
-        <button class="accordion-button ${index === 0 ? '' : 'collapsed'}" type="button" data-bs-toggle="collapse" data-bs-target="#${collapseId}" aria-expanded="${index === 0 ? 'true' : 'false'}" aria-controls="${collapseId}">
+        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#${collapseId}" aria-expanded="false" aria-controls="${collapseId}">
           ${org.name} (ID: ${org.id})
         </button>
       </h2>
-      <div id="${collapseId}" class="accordion-collapse collapse ${index === 0 ? 'show' : ''}" aria-labelledby="${itemId}" data-bs-parent="#orgAccordion">
+      <div id="${collapseId}" class="accordion-collapse collapse" aria-labelledby="${itemId}" data-bs-parent="#orgAccordion">
         <div class="accordion-body">
           <div class="mb-4">
             <h4>Create Team</h4>
@@ -92,14 +92,14 @@ async function loadTeamsForOrg(orgId) {
     return;
   }
 
-  teams.forEach((team, index) => {
+  teams.forEach((team) => {
     const itemId = `team-${team.id}-${orgId}`;
     const collapseId = `collapse-team-${team.id}-${orgId}`;
     const item = document.createElement('div');
     item.className = 'accordion-item';
     item.innerHTML = `
       <h2 class="accordion-header" id="${itemId}">
-        <button class="accordion-button ${index === 0 ? '' : 'collapsed'}" type="button" data-bs-toggle="collapse" data-bs-target="#${collapseId}" aria-expanded="${index === 0 ? 'true' : 'false'}" aria-controls="${collapseId}">
+        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#${collapseId}" aria-expanded="false" aria-controls="${collapseId}">
           <table class="w-100">
             <tr>
               <td>${team.name} (ID: ${team.id})</td>
@@ -111,7 +111,7 @@ async function loadTeamsForOrg(orgId) {
           </table>
         </button>
       </h2>
-      <div id="${collapseId}" class="accordion-collapse collapse ${index === 0 ? 'show' : ''}" aria-labelledby="${itemId}" data-bs-parent="#teamAccordion-${orgId}">
+      <div id="${collapseId}" class="accordion-collapse collapse" aria-labelledby="${itemId}" data-bs-parent="#teamAccordion-${orgId}">
         <div class="accordion-body">
           <div class="mb-4">
             <h4>Invite User</h4>
