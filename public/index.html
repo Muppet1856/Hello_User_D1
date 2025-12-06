@@ -1,386 +1,43 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Hello User D1</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
-    <link rel="stylesheet" href="css/style.css" />
-  </head>
-  <body class="bg-gradient">
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark sticky-top shadow-sm">
-      <div class="container">
-        <a class="navbar-brand" href="#">Hello User D1</a>
-        <button
-          class="navbar-toggler"
-          type="button"
-          data-bs-toggle="collapse"
-          data-bs-target="#navigation"
-          aria-controls="navigation"
-          aria-expanded="false"
-          aria-label="Toggle navigation"
-        >
-          <span class="navbar-toggler-icon"></span>
-        </button>
-        <div class="collapse navbar-collapse" id="navigation">
-          <ul class="navbar-nav ms-auto" id="dynamic-nav">
-            <li class="nav-item">
-              <a class="nav-link active" href="#hero" data-page-link="landing">Home</a>
-            </li>
-          </ul>
-        </div>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>User Admin</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
+</head>
+<body>
+  <div class="container mt-5">
+    <div id="login-form">
+      <h2>Login</h2>
+      <div class="mb-3">
+        <input id="email" class="form-control" placeholder="Email" type="email">
       </div>
-    </nav>
+      <button id="login-btn" class="btn btn-primary">Send Login Link</button>
+      <div id="login-message" class="mt-3"></div>
+    </div>
 
-    <main class="container py-5">
-      <div id="status-alert" class="mb-4"></div>
+    <div id="dashboard" class="class="d-none"">
+      <ul class="nav nav-tabs" id="adminTabs" role="tablist">
+        <li class="nav-item class="d-none"" id="main-admin-nav"><a class="nav-link" href="#main-admin" data-bs-toggle="tab">Main Admin</a></li>
+        <li class="nav-item class="d-none"" id="org-admin-nav"><a class="nav-link" href="#org-admin" data-bs-toggle="tab">Org Admin</a></li>
+        <li class="nav-item class="d-none"" id="team-admin-nav"><a class="nav-link" href="#team-admin" data-bs-toggle="tab">Team Admin</a></li>
+      </ul>
+      <div class="tab-content mt-3">
+        <div class="tab-pane" id="main-admin"> <!-- Main Admin content will be filled by main-admin.js --> </div>
+        <div class="tab-pane" id="org-admin"> <!-- Org Admin content --> </div>
+        <div class="tab-pane" id="team-admin"> <!-- Team Admin content --> </div>
+      </div>
+    </div>
+    <div id="loading" class="d-none text-center mt-5">
+      <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">Loading...</span>
+      </div>
+      <p class="mt-2">Loading dashboard...</p>
+    </div>
+  </div>
 
-      <section id="hero" data-page-section="landing" class="py-5">
-        <div class="row align-items-center g-4">
-          <div class="col-lg-6">
-            <p class="text-uppercase text-muted mb-2">Passwordless identity</p>
-            <h1 class="display-5 fw-bold">Teams, orgs, and roles delivered over D1</h1>
-            <p class="lead text-muted">
-              Magic links and passkeys give teams secure access without passwords. Use this console
-              to onboard admins, build organizations, manage teams, and keep every account tidy.
-            </p>
-            <div class="d-flex flex-wrap gap-3">
-              <a class="btn btn-outline-light btn-lg" href="#admin">Launch admin console</a>
-              <a class="btn btn-light btn-lg" href="#teams">Manage teams</a>
-            </div>
-          </div>
-          <div class="col-lg-6">
-            <div class="card shadow-sm mb-4">
-              <div class="card-body">
-                <h5 class="card-title">Magic email login</h5>
-                <p class="text-muted">Send and verify a passwordless token in seconds.</p>
-                <form id="magic-link-form" class="row g-2">
-                  <div class="col-12">
-                    <label for="magic-email" class="form-label">Email</label>
-                    <input
-                      id="magic-email"
-                      name="email"
-                      type="email"
-                      class="form-control"
-                      required
-                      placeholder="you@company.com"
-                    />
-                  </div>
-                  <div class="col-12">
-                    <button type="submit" class="btn btn-primary w-100">Send magic link</button>
-                  </div>
-                </form>
-                <hr />
-                <form id="magic-link-verify-form" class="row g-2">
-                  <div class="col-12">
-                    <label for="magic-verify-email" class="form-label">Email</label>
-                    <input
-                      id="magic-verify-email"
-                      name="email"
-                      type="email"
-                      class="form-control"
-                      required
-                    />
-                  </div>
-                  <div class="col-12">
-                    <label for="magic-token" class="form-label">Token</label>
-                    <input
-                      id="magic-token"
-                      name="token"
-                      type="text"
-                      class="form-control"
-                      required
-                      placeholder="Enter the token you copied"
-                    />
-                  </div>
-                  <div class="col-12">
-                    <button type="submit" class="btn btn-outline-primary w-100">
-                      Verify and enter
-                    </button>
-                  </div>
-                </form>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section id="admin" data-page-section="userAdmin" class="py-5 page-section d-none">
-        <div class="card shadow-sm mb-4">
-          <div class="card-body">
-            <div class="d-flex flex-wrap align-items-center justify-content-between mb-3 gap-3">
-              <div>
-                <h3 class="h4 mb-0">Main admin console</h3>
-                <p class="text-muted mb-0">
-                  Create organizations, invite org admins with the correct rights encoded in a magic link,
-                  and keep user records tidy.
-                </p>
-              </div>
-              <button id="refresh-users" class="btn btn-outline-primary">Refresh users</button>
-            </div>
-            <form id="create-user-form" class="row g-2">
-              <div class="col-md-4">
-                <label for="user-email" class="form-label">Email</label>
-                <input type="email" id="user-email" name="email" class="form-control" required />
-              </div>
-              <div class="col-md-3">
-                <label for="user-first-name" class="form-label">First name</label>
-                <input type="text" id="user-first-name" name="firstName" class="form-control" />
-              </div>
-              <div class="col-md-3">
-                <label for="user-last-name" class="form-label">Last name</label>
-                <input type="text" id="user-last-name" name="lastName" class="form-control" />
-              </div>
-              <div class="col-md-2 d-grid">
-                <button type="submit" class="btn btn-primary mt-2">Add user</button>
-              </div>
-            </form>
-            <div class="table-responsive mt-4">
-              <table class="table table-hover table-sm mb-0">
-                <thead>
-                  <tr>
-                    <th scope="col">User ID</th>
-                    <th scope="col">Email</th>
-                    <th scope="col">Name</th>
-                    <th scope="col">Verified</th>
-                    <th scope="col">Joined</th>
-                    <th scope="col">Actions</th>
-                  </tr>
-                </thead>
-                <tbody id="users-table-body"></tbody>
-              </table>
-            </div>
-            <hr class="my-4" />
-            <div class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-3">
-              <div>
-                <h4 class="h5 mb-1">Organization controls</h4>
-                <p class="text-muted mb-0">Admins can create or remove organizations from this console.</p>
-              </div>
-              <form id="create-org-form" class="row g-2 align-items-end">
-                <div class="col-auto">
-                  <label class="form-label mb-0">Name</label>
-                  <input name="name" type="text" class="form-control" placeholder="Acme Labs" required />
-                </div>
-                <div class="col-auto">
-                  <label class="form-label mb-0">Slug</label>
-                  <input
-                    name="slug"
-                    type="text"
-                    class="form-control"
-                    placeholder="acme-labs"
-                    required
-                  />
-                </div>
-                <div class="col-auto">
-                  <button type="submit" class="btn btn-primary">Create org</button>
-                </div>
-              </form>
-            </div>
-            <div class="mt-3">
-              <h5 class="mb-2">All organizations</h5>
-              <div id="org-list" class="row row-cols-1 row-cols-md-2 g-3"></div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section id="orgs" data-page-section="organizationAdmin" class="py-5 page-section d-none">
-          <div class="card shadow-sm">
-            <div class="card-body">
-              <div class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-3">
-                <div>
-                  <h3 class="h4 mb-1">Organization admins</h3>
-                  <p class="text-muted mb-0">
-                    Administer only the organizations where you hold org admin rights. Create teams, invite members,
-                    and use encoded invitation links that mirror magic links.
-                  </p>
-                </div>
-              </div>
-            <div class="row g-3 mt-3">
-              <div class="col-lg-5">
-                <label class="form-label">Organization to administer</label>
-                <select id="org-admin-select" class="form-select"></select>
-                <p class="text-muted small mt-2 mb-0">
-                  Invitations should carry the target role and org in the link. Pair the magic link token with the
-                  invite URL shown after you add a member.
-                </p>
-                <div id="org-invite-link" class="small mt-2 text-break text-muted"></div>
-              </div>
-              <div class="col-lg-7">
-                <div class="card bg-light h-100">
-                  <div class="card-body">
-                    <h5 class="card-title">Organization members</h5>
-                    <p class="text-muted small">Org admins cannot remove other org admins.</p>
-                    <div class="d-flex flex-column flex-lg-row gap-3">
-                      <div class="flex-grow-1">
-                        <ul id="org-members" class="list-group list-group-flush"></ul>
-                      </div>
-                      <div class="flex-grow-1">
-                        <form id="add-org-member-form" class="row g-2">
-                          <div class="col-12">
-                            <label for="org-user-select" class="form-label">User</label>
-                            <select id="org-user-select" class="form-select"></select>
-                          </div>
-                          <div class="col-12">
-                            <label for="org-role-select" class="form-label">Role</label>
-                            <select id="org-role-select" class="form-select"></select>
-                          </div>
-                          <div class="col-12 d-grid">
-                            <button type="submit" class="btn btn-success">Invite to org</button>
-                          </div>
-                        </form>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section id="teams" data-page-section="teamAdmin" class="py-5 page-section d-none">
-        <div class="card shadow-sm">
-          <div class="card-body">
-            <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
-              <div>
-                <h3 class="h4 mb-0">Team admins</h3>
-                <p class="text-muted mb-0">
-                  Administer teams you are a team admin for. Invite members with the right roles encoded in your
-                  invitation links and magic links. Team admins cannot remove other team admins.
-                </p>
-              </div>
-              <button id="refresh-teams" class="btn btn-outline-secondary">Reload teams</button>
-            </div>
-            <div class="row g-3">
-              <div class="col-md-4">
-                <label for="team-org-select" class="form-label">Organization</label>
-                <select id="team-org-select" class="form-select"></select>
-              </div>
-              <div class="col-md-4">
-                <label for="team-select" class="form-label">Team</label>
-                <select id="team-select" class="form-select"></select>
-              </div>
-              <div class="col-md-4">
-                <label for="team-role-select" class="form-label">Role for new members</label>
-                <select id="team-role-select" class="form-select"></select>
-              </div>
-            </div>
-            <form id="create-team-form" class="row g-3 mt-3">
-              <div class="col-md-5">
-                <label class="form-label">Team name</label>
-                <input name="name" type="text" class="form-control" placeholder="Platform team" required />
-              </div>
-              <div class="col-md-5">
-                <label class="form-label">Description</label>
-                <input
-                  name="description"
-                  type="text"
-                  class="form-control"
-                  placeholder="Where ops and analytics meet"
-                />
-              </div>
-              <div class="col-md-2 d-grid">
-                <button type="submit" class="btn btn-primary mt-2">Create team</button>
-              </div>
-            </form>
-            <div id="team-list" class="row row-cols-1 row-cols-md-2 g-3 mt-4"></div>
-            <div class="row g-3 mt-4 align-items-start">
-              <div class="col-md-6">
-                <h5 class="mb-3">Team members</h5>
-                <ul id="team-members" class="list-group list-group-flush"></ul>
-              </div>
-              <div class="col-md-6">
-                <h5 class="mb-3">Add member</h5>
-                <form id="add-team-member-form" class="row g-2">
-                  <div class="col-md-6">
-                    <label for="team-user-select" class="form-label">User</label>
-                    <select id="team-user-select" class="form-select"></select>
-                  </div>
-                  <div class="col-md-6">
-                    <label for="team-role-form-select" class="form-label">Role</label>
-                    <select id="team-role-form-select" class="form-select"></select>
-                  </div>
-                  <div class="col">
-                    <button type="submit" class="btn btn-success w-100">Add to team</button>
-                  </div>
-                </form>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section id="account" data-page-section="account" class="py-5 page-section d-none">
-        <div class="card shadow-sm">
-          <div class="card-body">
-            <h3 class="h4 mb-3">Account management</h3>
-            <div id="account-profile" class="mb-3 text-muted small">
-              Sign in with a magic link or passkey to see your details.
-            </div>
-            <form id="account-form" class="row g-3">
-              <div class="col-md-4">
-                <label class="form-label">First name</label>
-                <input name="firstName" class="form-control" />
-              </div>
-              <div class="col-md-4">
-                <label class="form-label">Last name</label>
-                <input name="lastName" class="form-control" />
-              </div>
-              <div class="col-md-4">
-                <label class="form-label">Avatar URL</label>
-                <input name="avatarUrl" type="url" class="form-control" />
-              </div>
-              <div class="col-12 d-grid">
-                <button type="submit" class="btn btn-dark">Update my info</button>
-              </div>
-            </form>
-            <hr />
-            <div class="card bg-light">
-              <div class="card-body">
-                <h5 class="card-title">Passkeys</h5>
-                <p class="text-muted">
-                  Register devices or authenticate only after you have created your account. The forms stay disabled
-                  until you sign in.
-                </p>
-                <form id="passkey-register-form" class="row g-2" data-requires-session>
-                  <div class="col-12">
-                    <label for="passkey-device" class="form-label">Device name</label>
-                    <input
-                      id="passkey-device"
-                      name="name"
-                      class="form-control"
-                      placeholder="Work Mac, personal phone"
-                      disabled
-                    />
-                  </div>
-                  <div class="col-12">
-                    <button type="submit" class="btn btn-success w-100" disabled>Register passkey</button>
-                  </div>
-                </form>
-                <form id="passkey-auth-form" class="row g-2 mt-3" data-requires-session>
-                  <div class="col-12">
-                    <label for="passkey-credential-id" class="form-label">Credential ID</label>
-                    <input
-                      id="passkey-credential-id"
-                      name="credentialId"
-                      class="form-control"
-                      placeholder="Paste a credential id"
-                      disabled
-                    />
-                  </div>
-                  <div class="col-12">
-                    <button type="submit" class="btn btn-outline-success w-100" disabled>Authenticate</button>
-                  </div>
-                </form>
-                <div id="passkey-list" class="mt-3"></div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-    </main>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI" crossorigin="anonymous"></script>
-    <script type="module" src="ts/app.js"></script>
-  </body>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI" crossorigin="anonymous"></script>
+  <script type="module" src="/js/app.js"></script>  <!-- Only load app.js; it imports others -->
+</body>
 </html>
