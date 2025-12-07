@@ -334,10 +334,10 @@ jobs:
       # ————————————————————————
       # Echo Wrangler
       # ————————————————————————
-      - name: Add secrets programmatically
+      - name: Echo wrangler.toml
         if: steps.cfg.outputs.type != 'skip'
         run: |
-          echo wrangler.toml
+          echo "$(cat wrangler.toml)"
 
       # ————————————————————————
       # Deploy Worker
