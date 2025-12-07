@@ -312,6 +312,14 @@ jobs:
           COUNT=$(jq 'keys | length' "$VARS_JSON")
           echo "Injected $COUNT variable(s) from $VARS_JSON into $TOML"
 
+          # -----------------------------------------------------------------
+          # 5. Append URL
+          # -----------------------------------------------------------------
+          echo  "APP_URL=\"${{ env.WORKER_HOST }}\"" >> "$TOML"
+          
+          COUNT=$(jq 'keys | length' "$VARS_JSON")
+          echo "Injected $COUNT variable(s) from $VARS_JSON into $TOML"
+
       # ————————————————————————
       # Add Secrets
       # ————————————————————————

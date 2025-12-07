@@ -34,16 +34,18 @@ auth.post('/login', async (c) => {
     'INSERT INTO invitations (id, token, email, role, org_id, team_id, expires_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
   ).bind(crypto.randomUUID(), token, email, 'login', null, null, expiresAt, user!.id).run();
 
-  const loginUrl = `https://grok-hello-user.zellen.workers.dev/?token=${token}`;
+  const baseUrl = c.env.APP_URL?.trim() || 'localhost';
+  const normalizedBaseUrl = baseUrl.startsWith('http') ? baseUrl : `https://${baseUrl}`;
+  const loginUrl = `${normalizedBaseUrl.replace(/\/+$/, '')}/?token=${token}`;
 
   const resend = new Resend(c.env.RESEND_API_KEY);
   await resend.emails.send({
     from: 'registration@volleyballscore.app',
     to: email,
-    subject: 'Hello User Login Link',
+    subject: 'Login Link for VolleyballScore.app',
     html: `<p>Click <a href="${loginUrl}">here</a> to log in (expires in 1 hour).</p>`,
   });
-
+  
   return c.json({ success: true });
 });
 
