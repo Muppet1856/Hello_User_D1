@@ -30,6 +30,15 @@ app.route('/api', api);
 
 // Static assets fallback
 app.get('*', async (c) => {
+  const path = c.req.path;
+  const isRoot = path === '/';
+  const isJsAsset = path === '/js' || path.startsWith('/js/');
+  const isCssAsset = path === '/css' || path.startsWith('/css/');
+
+  if (!isRoot && !isJsAsset && !isCssAsset) {
+    return c.text('Not Found', 404);
+  }
+
   try {
     const res = await c.env.ASSETS.fetch(c.req);
     return res;
