@@ -186,32 +186,32 @@ jobs:
               -H "Content-Type: application/json"
           }
 
+          # Always fetch the workers.dev subdomain
+          SUB_JSON=$(cf_get "accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/subdomain")
+          SUBDOMAIN=$(echo "$SUB_JSON" | jq -r '.result.subdomain // empty')
+          [ -n "$SUBDOMAIN" ] || { echo "Error: cannot get workers.dev subdomain" >&2; exit 1; }
+
+          # Fetch custom domain for this specific worker (if any)
           DOMAIN_HOST=""
+          BASE_NAME="${{ env.WORKER_NAME }}"
           DOMAINS_JSON=$(cf_get "accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/domains")
-          DOMAIN_HOST=$(echo "$DOMAINS_JSON" | jq -r '.result[]? | select(.hostname != null and .hostname != "") | .hostname' | head -n1 || true)
+          DOMAIN_HOST=$(echo "$DOMAINS_JSON" | jq -r --arg worker "$BASE_NAME" '.result[]? | select(.service == $worker and .hostname != null and .hostname != "") | .hostname' | head -n1 || true)
 
           if [ -n "$DOMAIN_HOST" ]; then
             DOMAIN_HOST=$(echo "$DOMAIN_HOST" | tr -d '[:space:]')
-            echo "Custom domain found: $DOMAIN_HOST"
+            echo "Custom domain found for worker $BASE_NAME: $DOMAIN_HOST"
           else
-            echo "No custom domain – falling back to workers.dev"
+            echo "No custom domain found for worker $BASE_NAME – using workers.dev for all"
           fi
 
-          BASE_NAME="${{ env.WORKER_NAME }}"
-
-          if [ -n "$DOMAIN_HOST" ]; then
-            if [ -n "${{ steps.cfg.outputs.env_name }}" ]; then
-              HOST="${{ steps.cfg.outputs.env_name }}-${BASE_NAME}.preview.${DOMAIN_HOST}"
-            else
-              HOST="${DOMAIN_HOST}"
-            fi
+          # For previews (non-main branches): Always use workers.dev
+          if [ -n "${{ steps.cfg.outputs.env_name }}" ]; then
+            HOST="${{ steps.cfg.outputs.env_name }}-${BASE_NAME}.${SUBDOMAIN}.workers.dev"
+          
+          # For production (main branch): Use custom domain if available for this worker, else workers.dev
           else
-            SUB_JSON=$(cf_get "accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/subdomain")
-            SUBDOMAIN=$(echo "$SUB_JSON" | jq -r '.result.subdomain // empty')
-            [ -n "$SUBDOMAIN" ] || { echo "Error: cannot get workers.dev subdomain" >&2; exit 1; }
-
-            if [ -n "${{ steps.cfg.outputs.env_name }}" ]; then
-              HOST="${{ steps.cfg.outputs.env_name }}-${BASE_NAME}.${SUBDOMAIN}.workers.dev"
+            if [ -n "$DOMAIN_HOST" ]; then
+              HOST="${DOMAIN_HOST}"
             else
               HOST="${BASE_NAME}.${SUBDOMAIN}.workers.dev"
             fi
@@ -281,6 +281,8 @@ jobs:
           # -----------------------------------------------------------------
           if [[ ! -f "$VARS_JSON" ]]; then
             echo "No $VARS_JSON found – nothing to inject."
+            echo "[vars]" >> "$TOML"
+            echo  "APP_URL=\"${{ env.WORKER_HOST }}\"" >> "$TOML"
             exit 0
           fi
 
@@ -308,9 +310,6 @@ jobs:
                    "\(.key) = \"\(.value | gsub("\""; "\\\""))\""' "$VARS_JSON"
             echo "# --- END INJECTED VARS ---"
           } >> "$TOML"
-
-          COUNT=$(jq 'keys | length' "$VARS_JSON")
-          echo "Injected $COUNT variable(s) from $VARS_JSON into $TOML"
 
           # -----------------------------------------------------------------
           # 5. Append URL
