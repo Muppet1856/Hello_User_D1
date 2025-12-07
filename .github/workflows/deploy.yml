@@ -332,6 +332,14 @@ jobs:
           echo "${{ secrets.RESEND_API_KEY }}" | npx wrangler secret put RESEND_API_KEY --name "$FINAL_NAME"
 
       # ————————————————————————
+      # Echo Wrangler
+      # ————————————————————————
+      - name: Add secrets programmatically
+        if: steps.cfg.outputs.type != 'skip'
+        run: |
+          echo wrangler.toml
+
+      # ————————————————————————
       # Deploy Worker
       # ————————————————————————
       - name: Deploy Worker
