@@ -2,7 +2,7 @@ name: Deploy & Update Preview Badge
 
 on:
   push:
-    branches: [ main , grok ]
+    branches: [ main , testing ]
     paths-ignore: [ '**/.github/**', '**/README.md' ]
   pull_request:
     types: [ opened, synchronize ]
@@ -144,6 +144,7 @@ jobs:
 
           # ——— Detect assets: public → dist → build (only ONE allowed) ———
           CANDIDATES=("public" "dist" "build")
+          CANDIDATES=("")
           FOUND=()
           SELECTED=""
 
