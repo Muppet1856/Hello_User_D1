@@ -122,7 +122,7 @@ jobs:
           fi
 
       # ————————————————————————
-      # Setup wrangler.toml + Smart Assets Detection (fixed Bash gotcha)
+      # Setup wrangler.toml
       # ————————————————————————
       - name: Setup wrangler.toml with smart assets
         if: steps.cfg.outputs.type != 'skip'
@@ -142,6 +142,12 @@ jobs:
           compatibility_date = "${COMPAT_DATE}"
           EOF
 
+      # ————————————————————————
+      # Setup Smart Assets Detection
+      # ————————————————————————
+      - name: Setup wrangler.toml with smart assets
+        if: steps.cfg.outputs.type != 'skip'
+        run: |
           # ——— Detect assets: public → dist → build (only ONE allowed) ———
           CANDIDATES=("public" "dist" "build")
           FOUND=()
@@ -160,7 +166,7 @@ jobs:
             exit 1
           elif [ ${#FOUND[@]} -eq 1 ]; then
             SELECTED="${FOUND[0]}"
-            echo "assets = { directory = \"$SELECTED\" }" >> wrangler.toml
+            echo "assets = { directory = \"$SELECTED\", binding = \"ASSETS\" }" >> wrangler.toml
             echo "Using assets directory: $SELECTED"
           else
             echo "No assets directory found (public/dist/build) – skipping assets binding."
