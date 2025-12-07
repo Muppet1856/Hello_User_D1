@@ -141,6 +141,7 @@ jobs:
           main = "src/index.ts"
           compatibility_date = "${COMPAT_DATE}"
           EOF
+          echo "FINAL_WORKER_NAME=$FINAL_NAME" >> $GITHUB_ENV
 
       # ————————————————————————
       # Setup Smart Assets Detection
@@ -172,7 +173,6 @@ jobs:
             echo "No assets directory found (public/dist/build) – skipping assets binding."
           fi
 
-          echo "FINAL_WORKER_NAME=$FINAL_NAME" >> $GITHUB_ENV
           if [ -n "$SELECTED" ]; then
             echo "ASSETS_DIR=$SELECTED" >> $GITHUB_ENV
           fi
