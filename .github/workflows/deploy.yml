@@ -144,7 +144,6 @@ jobs:
 
           # ——— Detect assets: public → dist → build (only ONE allowed) ———
           CANDIDATES=("public" "dist" "build")
-          CANDIDATES=("")
           FOUND=()
           SELECTED=""
 

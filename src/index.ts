@@ -19,8 +19,9 @@ const api = new Hono<{ Bindings: Bindings }>();
 app.use('*', async (c, next) => {
   const start = Date.now();
   console.log(`[REQ] ${c.req.method} ${c.req.url}`);
-  const res = await next();
+  await next();
   const duration = Date.now() - start;
+  const res = c.res ?? new Response('Not Found', { status: 404 });
   console.log(`[RES] ${c.req.method} ${c.req.url} -> ${res.status} (${duration}ms)`);
   return res;
 });
